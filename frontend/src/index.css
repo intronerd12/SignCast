@@ -1,0 +1,60 @@
+:root {
+  --page: #edf6f4;
+  --panel: #ffffff;
+  --ink: #102023;
+  --muted: #5d6d70;
+  --line: #d7e5e2;
+  --teal: #0f766e;
+  --teal-deep: #064e47;
+  --cyan: #16b8b3;
+  --amber: #f2a51a;
+  --shadow: 0 24px 70px rgba(15, 47, 51, 0.16);
+  color: var(--ink);
+  background: var(--page);
+  font-family: "Segoe UI", Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    linear-gradient(rgba(15, 118, 110, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 118, 110, 0.07) 1px, transparent 1px),
+    var(--page);
+  background-size: 34px 34px;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+a {
+  color: var(--teal);
+}
+
+a:hover {
+  color: var(--teal-deep);
+}
+
+p {
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+}
