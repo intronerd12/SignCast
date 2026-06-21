@@ -4,7 +4,6 @@ import { createStackNavigator, TransitionPresets } from '@react-navigation/stack
 import AuthScreen from "../../screens/AuthUI/AuthScreen";
 import UserProfile from "../../screens/User/UserProfile";
 import AuthGlobal from "../Context/Store/AuthGlobal";
-// import MyOrders from "../../screens/User/MyOrders";
 const Stack = createStackNavigator();
 
 const UserNavigator = (props) => {
@@ -40,14 +39,6 @@ const UserNavigator = (props) => {
                     title: "My Account"
                 }}
             />
-
-            {/* <Stack.Screen
-                name="My Orders"
-                component={MyOrders}
-                options={{
-                    headerShown: false
-                }}
-            /> */}
         </Stack.Navigator>
     )
 

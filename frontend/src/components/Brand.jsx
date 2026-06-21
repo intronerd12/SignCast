@@ -18,7 +18,7 @@ export function BrandLockup() {
       <BrandMark />
       <span>
         <strong>SignCast</strong>
-        <small>Filipino Sign Language mapper</small>
+        <small>ASL recognition app</small>
       </span>
     </a>
   )
@@ -28,7 +28,7 @@ export function VectorGesturePreview() {
   return (
     <div className="gesture-preview" aria-label="Vector gesture preview">
       <div className="preview-toolbar">
-        <span>Live FSL capture</span>
+        <span>Live ASL capture</span>
         <strong>Stable</strong>
       </div>
       <svg className="gesture-map" viewBox="0 0 520 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hand landmarks connected by vector lines">
@@ -61,7 +61,7 @@ export function VectorGesturePreview() {
           vector points
         </span>
         <span>
-          <strong>FSL</strong>
+          <strong>ASL</strong>
           dictionary
         </span>
       </div>

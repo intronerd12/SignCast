@@ -10,7 +10,7 @@ function RegisterPage() {
     phone: '',
     password: '',
     confirmPassword: '',
-    purpose: 'fsl-user',
+    purpose: 'asl-user',
   })
   const [status, setStatus] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -56,7 +56,7 @@ function RegisterPage() {
         phone: '',
         password: '',
         confirmPassword: '',
-        purpose: 'fsl-user',
+        purpose: 'asl-user',
       })
     } catch (error) {
       setStatus(error.message)
@@ -73,7 +73,7 @@ function RegisterPage() {
           <p className="eyebrow">Create access</p>
           <h1>Register for SignCast</h1>
           <p>
-            Create a user account for the Filipino Sign Language recognition app. Admin accounts can be assigned separately by the system owner.
+            Create a user account for the American Sign Language recognition app. Admin accounts can be assigned separately by the system owner.
           </p>
         </div>
         <VectorGesturePreview />
@@ -105,8 +105,8 @@ function RegisterPage() {
           <label className="field">
             <span>Purpose</span>
             <select name="purpose" value={form.purpose} onChange={updateField}>
-              <option value="fsl-user">FSL user</option>
-              <option value="learner">FSL learner</option>
+              <option value="asl-user">ASL user</option>
+              <option value="learner">ASL learner</option>
               <option value="interpreter">Interpreter or educator</option>
               <option value="support">Accessibility support</option>
             </select>

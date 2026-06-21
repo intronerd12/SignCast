@@ -23,20 +23,6 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
-    cart: [
-      {
-        product: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: 'Product',
-          required: true
-        },
-        quantity: {
-          type: Number,
-          required: true,
-          default: 1
-        }
-      }
-    ],
     image: {
       type: String,
       default: ''

@@ -3,10 +3,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const usersRouter = require('./routes/users');
-const categoriesRouter = require("./routes/categories");
-const productsRouter = require("./routes/products");
-const ordersRouter = require("./routes/orders");
-const promotionsRouter = require("./routes/promotions");
+const recognitionRouter = require("./routes/recognition");
 
 dotenv.config();
 
@@ -20,14 +17,11 @@ app.use(express.json());
 app.use('/public/uploads', express.static(__dirname + '/public/uploads'));
 
 app.use(`${API_PREFIX}/users`, usersRouter);
-app.use(`${API_PREFIX}/categories`, categoriesRouter);
-app.use(`${API_PREFIX}/products`, productsRouter);
-app.use(`${API_PREFIX}/orders`, ordersRouter);
-app.use(`${API_PREFIX}/promotions`, promotionsRouter);
+app.use(`${API_PREFIX}/recognition`, recognitionRouter);
 
 app.get(API_PREFIX, (req, res) => {
   res.json({
-    message: 'Studyzie backend API',
+    message: 'SignCast ASL recognition API',
     status: 'ok',
     env: process.env.NODE_ENV || 'unknown'
   });
@@ -44,8 +38,7 @@ const startServer = async () => {
   if (process.env.MONGO_URI) {
     try {
       await mongoose.connect(process.env.MONGO_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true
+        serverSelectionTimeoutMS: 8000
       });
       console.log('Connected to MongoDB');
     } catch (error) {
@@ -56,7 +49,7 @@ const startServer = async () => {
   }
 
   app.listen(PORT, () => {
-    console.log(`Studyzie backend running on http://localhost:${PORT}${API_PREFIX}`);
+    console.log(`SignCast backend running on http://localhost:${PORT}${API_PREFIX}`);
   });
 };
 

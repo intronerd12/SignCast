@@ -58,7 +58,7 @@ function LoginPage() {
           <p className="eyebrow">Secure access</p>
           <h1>Login to SignCast</h1>
           <p>
-            Users can enter the FSL recognition app, while admins can access the web management area once connected.
+            Users can enter the ASL recognition app, while admins can access the web management area once connected.
           </p>
         </div>
         <VectorGesturePreview />

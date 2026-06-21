@@ -1,20 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
-import { BrandLockup, VectorGesturePreview } from './components/Brand.jsx'
+import { BrandLockup } from './components/Brand.jsx'
 import LoginPage from './pages/login.js'
 import RegisterPage from './pages/register.js'
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
+
 const getRoute = () => {
   const route = window.location.hash.replace('#/', '').trim()
-  return route || 'home'
+  return route || 'recognizer'
 }
+
+const aslSamples = [
+  { phrase: 'Hello', confidence: 94, motion: 'Open palm wave', stability: 'Stable' },
+  { phrase: 'Thank you', confidence: 91, motion: 'Fingertips from chin outward', stability: 'Stable' },
+  { phrase: 'Please', confidence: 87, motion: 'Flat palm circular chest motion', stability: 'Checking' },
+  { phrase: 'Yes', confidence: 89, motion: 'Closed fist nod', stability: 'Stable' },
+]
 
 function Header({ route }) {
   return (
     <header className="site-header">
       <BrandLockup />
       <nav className="site-nav" aria-label="Main navigation">
-        <a className={route === 'home' ? 'active' : ''} href="#/">Home</a>
+        <a className={route === 'recognizer' ? 'active' : ''} href="#/">Recognizer</a>
+        <a className={route === 'library' ? 'active' : ''} href="#/library">Library</a>
         <a className={route === 'login' ? 'active' : ''} href="#/login">Login</a>
         <a className="nav-button" href="#/register">Register</a>
       </nav>
@@ -22,89 +32,218 @@ function Header({ route }) {
   )
 }
 
-function LandingPage() {
-  const systemPoints = [
-    {
-      title: 'Filipino Sign Language first',
-      text: 'SignCast is shaped around FSL communication needs for Filipino users, learners, interpreters, and accessibility support teams.',
-    },
-    {
-      title: 'Browser-based recognition',
-      text: 'The app direction focuses on local camera landmarks, vector geometry, and fast gesture matching inside the browser.',
-    },
-    {
-      title: 'Admin web workspace',
-      text: 'The web side gives administrators a clear place to manage accounts, review usage, and maintain recognition content later.',
-    },
-  ]
+function RecognitionWorkspace() {
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const [cameraState, setCameraState] = useState('off')
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [transcript, setTranscript] = useState([])
+  const [apiStatus, setApiStatus] = useState('Ready')
 
-  const workflow = ['Camera landmarks', 'Vector geometry', 'FSL rule matching', 'Text and speech output']
+  const currentSign = aslSamples[selectedIndex]
+  const sentence = useMemo(() => transcript.map((item) => item.phrase).join(' '), [transcript])
+
+  useEffect(() => {
+    if (cameraState !== 'active') return undefined
+
+    const timer = window.setInterval(() => {
+      setSelectedIndex((current) => (current + 1) % aslSamples.length)
+    }, 2600)
+
+    return () => window.clearInterval(timer)
+  }, [cameraState])
+
+  useEffect(() => () => stopCamera(), [])
+
+  const startCamera = async () => {
+    setApiStatus('Opening camera')
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      })
+
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+      setCameraState('active')
+      setApiStatus('Camera active')
+    } catch (error) {
+      setCameraState('blocked')
+      setApiStatus('Camera permission needed')
+    }
+  }
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    setCameraState('off')
+  }
+
+  const captureSign = async () => {
+    const payload = {
+      landmarks: [],
+      hint: currentSign.phrase,
+      source: 'web-prototype',
+    }
+
+    try {
+      setApiStatus('Interpreting')
+      const response = await fetch(`${API_BASE}/recognition/interpret`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Recognition service unavailable')
+      }
+
+      setTranscript((current) => [
+        ...current,
+        {
+          phrase: data.phrase || currentSign.phrase,
+          confidence: data.confidence || currentSign.confidence,
+        },
+      ])
+      setApiStatus('Saved to transcript')
+    } catch (error) {
+      setTranscript((current) => [...current, currentSign])
+      setApiStatus('Saved locally')
+    }
+  }
+
+  const speakSentence = () => {
+    if (!sentence || !window.speechSynthesis) return
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(sentence))
+  }
+
+  const clearTranscript = () => {
+    setTranscript([])
+    setApiStatus('Transcript cleared')
+  }
 
   return (
-    <>
-      <section className="hero-section">
-        <div className="hero-copy">
-          <p className="eyebrow">Accessibility technology for Filipino Sign Language</p>
-          <h1>SignCast turns FSL gestures into readable communication.</h1>
-          <p className="hero-text">
-            A browser and app system for translating Filipino Sign Language gestures into text and speech using landmark tracking and vector-based gesture rules.
-          </p>
-          <div className="hero-actions">
-            <a className="primary-action" href="#/register">Create account</a>
-            <a className="secondary-action" href="#/login">Login</a>
+    <section className="recognizer-shell">
+      <div className="phone-stage" aria-label="ASL recognition mobile preview">
+        <div className="camera-panel">
+          <video ref={videoRef} className="camera-feed" autoPlay muted playsInline />
+          {cameraState !== 'active' && (
+            <div className="camera-placeholder">
+              <span className="scan-frame" />
+              <strong>ASL camera</strong>
+              <small>{cameraState === 'blocked' ? 'Enable camera permission in your browser.' : 'Camera preview is off.'}</small>
+            </div>
+          )}
+          <div className="tracking-overlay">
+            <span className="tracking-dot wrist" />
+            <span className="tracking-dot thumb" />
+            <span className="tracking-dot index" />
+            <span className="tracking-dot middle" />
+            <span className="tracking-line line-a" />
+            <span className="tracking-line line-b" />
+          </div>
+          <div className="camera-topbar">
+            <span>{apiStatus}</span>
+            <strong>{cameraState === 'active' ? 'Live' : 'Idle'}</strong>
           </div>
         </div>
-        <VectorGesturePreview />
-      </section>
 
-      <section className="section-block about-section">
-        <div>
-          <p className="eyebrow">About us</p>
-          <h2>Built for inclusive, low-latency communication.</h2>
-        </div>
-        <p>
-          SignCast supports a study focused on making Filipino Sign Language interaction more accessible through local browser processing. The goal is to reduce dependence on expensive cloud recognition services while giving users and admins a clean, reliable interface.
-        </p>
-      </section>
-
-      <section className="section-block">
-        <div className="section-heading">
-          <p className="eyebrow">System overview</p>
-          <h2>One platform for FSL users and web administrators.</h2>
-        </div>
-        <div className="info-grid">
-          {systemPoints.map((point) => (
-            <article className="info-card" key={point.title}>
-              <h3>{point.title}</h3>
-              <p>{point.text}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="process-band" aria-label="SignCast process">
-        {workflow.map((item, index) => (
-          <div className="process-step" key={item}>
-            <span>{String(index + 1).padStart(2, '0')}</span>
-            <strong>{item}</strong>
+        <div className="recognition-readout">
+          <div>
+            <span className="label">Detected sign</span>
+            <h1>{currentSign.phrase}</h1>
           </div>
-        ))}
-      </section>
+          <div className="confidence-meter" aria-label={`Confidence ${currentSign.confidence} percent`}>
+            <span style={{ width: `${currentSign.confidence}%` }} />
+          </div>
+          <dl className="signal-grid">
+            <div>
+              <dt>Confidence</dt>
+              <dd>{currentSign.confidence}%</dd>
+            </div>
+            <div>
+              <dt>Motion</dt>
+              <dd>{currentSign.motion}</dd>
+            </div>
+            <div>
+              <dt>Stability</dt>
+              <dd>{currentSign.stability}</dd>
+            </div>
+          </dl>
+        </div>
 
-      <section className="section-block split-section">
-        <div>
-          <p className="eyebrow">For visitors</p>
-          <h2>Learn the system before creating an account.</h2>
+        <div className="control-dock">
+          <button type="button" onClick={cameraState === 'active' ? stopCamera : startCamera}>
+            {cameraState === 'active' ? 'Stop camera' : 'Start camera'}
+          </button>
+          <button type="button" onClick={captureSign}>Add sign</button>
+          <button type="button" onClick={speakSentence} disabled={!sentence}>Speak</button>
+        </div>
+      </div>
+
+      <aside className="workspace-panel">
+        <div className="panel-heading">
+          <p className="eyebrow">Mobile recognition system</p>
+          <h2>SignCast for ASL communication</h2>
           <p>
-            Visitors can understand the purpose, accessibility value, and FSL focus of SignCast from this landing page before moving to the app or admin web login.
+            This build is now shaped around an ASL recognition app: camera capture, gesture interpretation, transcript output, and speech playback.
           </p>
         </div>
-        <div className="quote-panel">
-          <strong>Study focus</strong>
-          <p>Browser-based Filipino Sign Language recognition using landmark vectors, stability checks, and speech synthesis.</p>
+
+        <div className="transcript-panel">
+          <div className="transcript-header">
+            <span>Transcript</span>
+            <button type="button" onClick={clearTranscript}>Clear</button>
+          </div>
+          <p className={sentence ? 'sentence active' : 'sentence'}>
+            {sentence || 'Recognized signs will appear here.'}
+          </p>
         </div>
-      </section>
-    </>
+
+        <div className="feature-grid">
+          <article>
+            <strong>Camera first</strong>
+            <span>Prepared for hand landmarks, frame sampling, and mobile camera permissions.</span>
+          </article>
+          <article>
+            <strong>Model ready</strong>
+            <span>The API endpoint can be connected to MediaPipe, TensorFlow, or a Python model service.</span>
+          </article>
+          <article>
+            <strong>Accessible output</strong>
+            <span>Recognized ASL signs become readable text and browser speech output.</span>
+          </article>
+        </div>
+      </aside>
+    </section>
+  )
+}
+
+function LibraryPage() {
+  return (
+    <section className="library-layout">
+      <div className="panel-heading">
+        <p className="eyebrow">ASL phrase library</p>
+        <h2>Core signs for prototype testing</h2>
+      </div>
+      <div className="sign-library">
+        {aslSamples.map((sample) => (
+          <article key={sample.phrase}>
+            <span>{sample.confidence}%</span>
+            <h3>{sample.phrase}</h3>
+            <p>{sample.motion}</p>
+          </article>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -121,7 +260,9 @@ function App() {
     ? <LoginPage />
     : route === 'register'
       ? <RegisterPage />
-      : <LandingPage />
+      : route === 'library'
+        ? <LibraryPage />
+        : <RecognitionWorkspace />
 
   return (
     <div className="app-shell">
