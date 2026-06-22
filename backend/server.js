@@ -34,15 +34,36 @@ app.get(`${API_PREFIX}/health`, (req, res) => {
   });
 });
 
+const DIRECT_MONGO_URI =
+  `mongodb://bumatayjilian_db_user:UB0zUzwcS4wPeKtj@` +
+  `ac-j8fqpfd-shard-00-00.evoccgn.mongodb.net:27017,` +
+  `ac-j8fqpfd-shard-00-01.evoccgn.mongodb.net:27017,` +
+  `ac-j8fqpfd-shard-00-02.evoccgn.mongodb.net:27017` +
+  `/SignCast?ssl=true&replicaSet=atlas-10w0km&authSource=admin`;
+
 const startServer = async () => {
   if (process.env.MONGO_URI) {
+    // Try SRV URI first
     try {
       await mongoose.connect(process.env.MONGO_URI, {
         serverSelectionTimeoutMS: 8000
       });
       console.log('Connected to MongoDB');
-    } catch (error) {
-      console.error('Failed to connect to MongoDB:', error.message);
+    } catch (srvError) {
+      // SRV DNS lookup may fail on some networks — fall back to direct hosts
+      if (srvError.message.includes('querySrv') || srvError.message.includes('ECONNREFUSED') || srvError.message.includes('DNS')) {
+        console.warn('SRV DNS lookup failed. Retrying MongoDB with direct host URI...');
+        try {
+          await mongoose.connect(DIRECT_MONGO_URI, {
+            serverSelectionTimeoutMS: 8000
+          });
+          console.log('Connected to MongoDB using direct URI fallback');
+        } catch (directError) {
+          console.error('Failed to connect to MongoDB (direct):', directError.message);
+        }
+      } else {
+        console.error('Failed to connect to MongoDB:', srvError.message);
+      }
     }
   } else {
     console.warn('MONGO_URI is not set; skipping MongoDB connection');
