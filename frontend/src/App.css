@@ -823,6 +823,87 @@ main {
   font-size: 14px;
 }
 
+.gesture-preview {
+  display: grid;
+  gap: 14px;
+}
+
+.preview-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+  font-size: 30px;
+}
+
+.preview-toolbar span,
+.preview-toolbar strong {
+  font-size: 30px;
+  line-height: 1.05;
+}
+
+.preview-toolbar span {
+  color: var(--blue);
+  font-weight: 900;
+}
+
+.preview-toolbar strong {
+  color: var(--orange);
+  font-weight: 900;
+}
+
+.gesture-map {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.gesture-map .measure {
+  fill: none;
+  stroke: rgba(15, 58, 55, 0.62);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.gesture-map .trace {
+  fill: rgba(15, 118, 110, 0.14);
+  stroke: #0f766e;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.gesture-map .joint {
+  fill: #ffffff;
+  stroke: #0f766e;
+  stroke-width: 2.6;
+}
+
+.gesture-map .joint.active {
+  fill: #d97706;
+  stroke: #ffffff;
+}
+
+.preview-readout {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.preview-readout span {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  color: var(--muted);
+}
+
+.preview-readout strong {
+  color: var(--ink);
+  font-size: 27px;
+  font-weight: 900;
+}
+
 /* Visual Element Styles */
 
 .hero-visualization {
