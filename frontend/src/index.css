@@ -1,13 +1,14 @@
 :root {
-  --page: #f6f8fb;
+  --page: #f0f9f7;
   --panel: #ffffff;
-  --ink: #14202a;
-  --muted: #62717f;
-  --line: #dce3ea;
-  --blue: #124c5f;
+  --ink: #0f3a37;
+  --muted: #667472;
+  --line: #d9ecea;
+  --blue: #0f766e;
+  --teal: #0f766e;
   --mint: #2fb7a9;
-  --orange: #b56718;
-  --shadow: 0 26px 80px rgba(20, 32, 42, 0.18);
+  --orange: #d97706;
+  --shadow: 0 26px 80px rgba(15, 118, 110, 0.18);
   color: var(--ink);
   background: var(--page);
   font-family: "Segoe UI", Arial, sans-serif;
@@ -30,8 +31,8 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    linear-gradient(rgba(18, 76, 95, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(18, 76, 95, 0.06) 1px, transparent 1px),
+    linear-gradient(rgba(15, 118, 110, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 118, 110, 0.05) 1px, transparent 1px),
     var(--page);
   background-size: 34px 34px;
 }
@@ -47,7 +48,7 @@ a {
 }
 
 a:hover {
-  color: #0a3443;
+  color: #0a5e55;
 }
 
 p {

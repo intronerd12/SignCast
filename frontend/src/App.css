@@ -13,7 +13,7 @@
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
   padding: 16px 0;
-  background: rgba(246, 248, 251, 0.9);
+  background: rgba(240, 249, 247, 0.92);
   backdrop-filter: blur(16px);
 }
 
@@ -47,10 +47,10 @@
   flex: 0 0 auto;
   place-items: center;
   color: #ffffff;
-  background: #124c5f;
-  border: 1px solid rgba(18, 76, 95, 0.2);
+  background: #0f766e;
+  border: 1px solid rgba(15, 118, 110, 0.2);
   border-radius: 8px;
-  box-shadow: 0 14px 30px rgba(20, 32, 42, 0.16);
+  box-shadow: 0 14px 30px rgba(15, 118, 110, 0.16);
 }
 
 .brand-mark svg {
@@ -101,7 +101,7 @@
 .site-nav a:hover,
 .site-nav a.active {
   color: var(--blue);
-  background: rgba(18, 76, 95, 0.09);
+  background: rgba(15, 118, 110, 0.09);
 }
 
 .site-nav .nav-button,
@@ -115,7 +115,7 @@
 .control-dock button:nth-child(2):hover,
 .submit-button:hover {
   color: #ffffff;
-  background: #0a3443;
+  background: #0a5e55;
 }
 
 main {
@@ -131,10 +131,10 @@ main {
 
 .marketing-hero {
   padding: 36px;
-  background: linear-gradient(140deg, #f8fafc, #ffffff);
+  background: linear-gradient(140deg, #f0f9f7, #ffffff);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 20px 70px rgba(20, 32, 42, 0.08);
+  box-shadow: 0 20px 70px rgba(15, 118, 110, 0.08);
 }
 
 .marketing-hero h1 {
@@ -214,7 +214,7 @@ main {
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(20, 32, 42, 0.04);
+  box-shadow: 0 4px 20px rgba(15, 118, 110, 0.06);
 }
 
 .section-heading {
@@ -567,7 +567,7 @@ main {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 20px 70px rgba(20, 32, 42, 0.08);
+  box-shadow: 0 20px 70px rgba(15, 118, 110, 0.08);
 }
 
 .workspace-panel {
