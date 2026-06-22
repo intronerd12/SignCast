@@ -408,6 +408,7 @@ main {
 .submit-button {
   width: 100%;
   min-height: 50px;
+  padding: 0 16px;
   border: 0;
   cursor: pointer;
 }
@@ -419,9 +420,17 @@ main {
 
 .form-message {
   min-height: 22px;
-  color: var(--teal-deep);
+  color: var(--muted);
   font-size: 14px;
   line-height: 1.5;
+}
+
+.form-message.success {
+  color: var(--teal-deep);
+}
+
+.form-message.error {
+  color: #d32f2f;
 }
 
 .auth-switch {

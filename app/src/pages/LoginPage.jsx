@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BrandLockup, VectorGesturePreview } from '../components/Brand.jsx'
+import { BrandLockup, VectorGesturePreview } from '../components/Brand'
 import { loginUser } from '../auth/authClient'
 
 function LoginPage() {
@@ -36,8 +36,8 @@ function LoginPage() {
       setStatus({
         type: 'success',
         message: session.isAdmin
-          ? 'Admin login successful. Redirecting to recognizer.'
-          : 'Login successful. Redirecting to recognizer.',
+          ? 'Admin login successful. Redirecting to the home screen.'
+          : 'Login successful. Redirecting to the home screen.',
       })
 
       window.setTimeout(() => {
@@ -58,7 +58,7 @@ function LoginPage() {
           <p className="eyebrow">Secure access</p>
           <h1>Login to SignCast</h1>
           <p>
-            Users can enter the FSL recognition app, while admins can access the web management area once connected.
+            Users can enter the FSL recognition app, while admins can access the web management area.
           </p>
         </div>
         <VectorGesturePreview />

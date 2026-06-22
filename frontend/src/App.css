@@ -559,6 +559,14 @@ main {
   font-size: 14px;
 }
 
+.form-message.success {
+  color: #0b5e55;
+}
+
+.form-message.error {
+  color: #d32f2f;
+}
+
 .auth-switch {
   margin: 24px 0 0;
   padding-top: 20px;

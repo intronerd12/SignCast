@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BrandLockup, VectorGesturePreview } from '../components/Brand.jsx'
+import { BrandLockup, VectorGesturePreview } from '../components/Brand'
 import { registerUser } from '../auth/authClient'
 
 const INITIAL_FORM = {
@@ -61,7 +61,7 @@ function RegisterPage() {
           <p className="eyebrow">Create access</p>
           <h1>Register for SignCast</h1>
           <p>
-            Create a user account for the Filipino Sign Language recognition app. Admin accounts can be assigned separately by the system owner.
+            Create a user account for the Filipino Sign Language recognition app. Admin accounts can be assigned separately.
           </p>
         </div>
         <VectorGesturePreview />
