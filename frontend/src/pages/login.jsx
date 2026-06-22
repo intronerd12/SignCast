@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { BrandLockup, VectorGesturePreview } from '../components/Brand.jsx'
 import { loginUser } from '../auth/authClient'
 
-function LoginPage() {
+function LoginPage({ onLoggedIn }) {
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -36,12 +36,16 @@ function LoginPage() {
       setStatus({
         type: 'success',
         message: session.isAdmin
-          ? 'Admin login successful. Redirecting to recognizer.'
-          : 'Login successful. Redirecting to recognizer.',
+          ? 'Admin login successful. Redirecting to app workspace.'
+          : 'Login successful. Redirecting to app workspace.',
       })
 
       window.setTimeout(() => {
-        window.location.hash = '#/'
+        if (typeof onLoggedIn === 'function') {
+          onLoggedIn(session)
+          return
+        }
+        window.location.hash = '#/app'
       }, 800)
     } catch (error) {
       setStatus({ type: 'error', message: error.message })

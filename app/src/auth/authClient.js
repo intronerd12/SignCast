@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api/v1'
 const SESSION_KEY = 'signcastAuth'
 
 const parseErrorMessage = async (response) => {
@@ -15,36 +17,28 @@ const parseErrorMessage = async (response) => {
   return 'Request failed. Please try again.'
 }
 
-const saveSession = (session, rememberMe = true) => {
-  const target = rememberMe ? window.localStorage : window.sessionStorage
-  const other = rememberMe ? window.sessionStorage : window.localStorage
-
-  other.removeItem(SESSION_KEY)
-  target.setItem(SESSION_KEY, JSON.stringify(session))
+const saveSession = async (session, rememberMe = true) => {
+  if (!rememberMe) return
+  await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session))
 }
 
-export const getSavedSession = () => {
-  const localSession = window.localStorage.getItem(SESSION_KEY)
-  const temporarySession = window.sessionStorage.getItem(SESSION_KEY)
-  const raw = localSession || temporarySession
-
+export const getSavedSession = async () => {
+  const raw = await AsyncStorage.getItem(SESSION_KEY)
   if (!raw) return null
 
   try {
     return JSON.parse(raw)
   } catch {
-    window.localStorage.removeItem(SESSION_KEY)
-    window.sessionStorage.removeItem(SESSION_KEY)
+    await AsyncStorage.removeItem(SESSION_KEY)
     return null
   }
 }
 
-export const clearSession = () => {
-  window.localStorage.removeItem(SESSION_KEY)
-  window.sessionStorage.removeItem(SESSION_KEY)
+export const clearSession = async () => {
+  await AsyncStorage.removeItem(SESSION_KEY)
 }
 
-export const loginUser = async ({ email, password, accessType, rememberMe }) => {
+export const loginUser = async ({ email, password, accessType, rememberMe = true }) => {
   const response = await fetch(`${API_BASE}/users/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -70,7 +64,7 @@ export const loginUser = async ({ email, password, accessType, rememberMe }) => 
     accessType,
   }
 
-  saveSession(session, rememberMe)
+  await saveSession(session, rememberMe)
   return session
 }
 
