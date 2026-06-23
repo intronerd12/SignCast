@@ -36,8 +36,8 @@ function LoginPage({ onLoggedIn }) {
       setStatus({
         type: 'success',
         message: session.isAdmin
-          ? 'Admin login successful. Redirecting to app workspace.'
-          : 'Login successful. Redirecting to app workspace.',
+          ? 'Admin login successful. Redirecting to admin dashboard.'
+          : 'Login successful. Redirecting to home page.',
       })
 
       window.setTimeout(() => {
@@ -45,7 +45,7 @@ function LoginPage({ onLoggedIn }) {
           onLoggedIn(session)
           return
         }
-        window.location.hash = '#/app'
+        window.location.hash = session.isAdmin ? '#/admin' : '#/app'
       }, 800)
     } catch (error) {
       setStatus({ type: 'error', message: error.message })

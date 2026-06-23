@@ -4,9 +4,13 @@
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "seed:supabase-users": "node scripts/seedSupabaseUsers.js",
+    "init:supabase-data": "node scripts/initSupabaseDataTables.js"
   },
   "dependencies": {
+    "@supabase/server": "^1.1.0",
+    "@supabase/supabase-js": "^2.108.2",
     "axios": "^1.7.0",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.9.0",
@@ -14,8 +18,10 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.3",
+    "mongodb": "^7.3.0",
     "mongoose": "^8.7.0",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"

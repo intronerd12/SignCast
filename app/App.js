@@ -226,8 +226,8 @@ function LandingScreen({ session, onLogout, setRoute }) {
             <Text style={styles.cardTitle}>Active session found</Text>
             <Text style={styles.cardBody}>{`Signed in as ${session.email || 'user'} (${session.accessType}).`}</Text>
             <View style={styles.buttonRow}>
-              <Pressable onPress={() => setRoute('app-home')} style={[styles.primaryButton, styles.buttonHalf]}>
-                <Text style={styles.primaryButtonText}>Open app home</Text>
+              <Pressable onPress={() => setRoute(session?.isAdmin ? 'admin-home' : 'app-home')} style={[styles.primaryButton, styles.buttonHalf]}>
+                <Text style={styles.primaryButtonText}>{session?.isAdmin ? 'Open admin home' : 'Open app home'}</Text>
               </Pressable>
               <Pressable onPress={onLogout} style={[styles.secondaryButton, styles.buttonHalf]}>
                 <Text style={styles.secondaryButtonText}>Logout</Text>
@@ -271,6 +271,9 @@ function LoggedInHomeScreen({ session, onLogout, setRoute }) {
           <Pressable onPress={() => setRoute('landing')} style={styles.secondaryButton}>
             <Text style={styles.secondaryButtonText}>Back to landing</Text>
           </Pressable>
+          <Pressable onPress={() => setRoute(session?.isAdmin ? 'admin-home' : 'app-home')} style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>{session?.isAdmin ? 'Open admin home' : 'Open app home'}</Text>
+          </Pressable>
           <Pressable onPress={onLogout} style={styles.primaryButton}>
             <Text style={styles.primaryButtonText}>Logout</Text>
           </Pressable>
@@ -301,7 +304,12 @@ function LoginScreen({ onSuccess }) {
         rememberMe: form.remember,
       })
 
-      setStatus({ type: 'success', message: 'Login successful.' })
+      setStatus({
+        type: 'success',
+        message: session.isAdmin
+          ? 'Admin login successful. Redirecting to admin home.'
+          : 'Login successful. Redirecting to home page.',
+      })
       onSuccess(session)
     } catch (error) {
       setStatus({ type: 'error', message: error.message || 'Unable to login.' })
@@ -358,6 +366,23 @@ function LoginScreen({ onSuccess }) {
       {!!status.message && (
         <Text style={[styles.message, status.type === 'error' ? styles.error : styles.success]}>{status.message}</Text>
       )}
+    </View>
+  )
+}
+
+function AdminHomeScreen({ session, onLogout, setRoute }) {
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>Admin home</Text>
+      <Text style={styles.cardBody}>{`Signed in as ${session?.email || 'admin'} with admin access.`}</Text>
+      <View style={styles.buttonColumn}>
+        <Pressable onPress={() => setRoute('app-home')} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Go to home</Text>
+        </Pressable>
+        <Pressable onPress={onLogout} style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>Logout</Text>
+        </Pressable>
+      </View>
     </View>
   )
 }
@@ -500,7 +525,7 @@ export default function App() {
 
                 if (!newSession) return
                 setSession(newSession)
-                setRoute('app-home')
+                setRoute(newSession.isAdmin ? 'admin-home' : 'app-home')
               }}
             />
           )}
@@ -517,6 +542,7 @@ export default function App() {
           )}
           {route === 'landing' && <LandingScreen session={session} onLogout={logout} setRoute={setRoute} />}
           {route === 'app-home' && <LoggedInHomeScreen session={session} onLogout={logout} setRoute={setRoute} />}
+          {route === 'admin-home' && <AdminHomeScreen session={session} onLogout={logout} setRoute={setRoute} />}
 
           <Text style={styles.footerNote}>
             Tip: set EXPO_PUBLIC_API_URL in app/.env so Expo Go can reach your backend over LAN.

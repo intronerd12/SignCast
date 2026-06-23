@@ -6,6 +6,10 @@ const { v2: cloudinary } = require("cloudinary");
 const crypto = require("crypto");
 const https = require("https");
 const User = require("../models/User");
+const {
+  createSupabaseAdminClient,
+  createSupabasePublicClient,
+} = require("../utils/supabaseClient");
 
 const FILE_TYPE_MAP = {
   "image/png": "png",
@@ -130,6 +134,32 @@ const buildUserPayload = (body, existingUser = {}) => ({
   country: body.country,
 });
 
+const getSupabaseUserIsAdmin = (user) =>
+  Boolean(user?.app_metadata?.isAdmin || user?.user_metadata?.isAdmin);
+
+const upsertUserProfile = async (supabaseAdmin, user, profile = {}) => {
+  const role = getSupabaseUserIsAdmin(user) ? "admin" : "user";
+
+  const { error } = await supabaseAdmin
+    .from("user_profiles")
+    .upsert(
+      {
+        id: user.id,
+        email: user.email,
+        full_name: profile.name || "",
+        phone: profile.phone || "",
+        role,
+        avatar_url: profile.image || "",
+        metadata: {
+          source: "backend-register",
+        },
+      },
+      { onConflict: "id" }
+    );
+
+  return error;
+};
+
 router.get("/", async (req, res) => {
   try {
     const userList = await User.find().select("-passwordHash");
@@ -187,7 +217,60 @@ const createUser = async (req, res) => {
 
 router.post("/", uploadOptions.single("image"), createUser);
 
-router.post("/register", uploadOptions.single("image"), createUser);
+router.post("/register", uploadOptions.single("image"), async (req, res) => {
+  try {
+    const { name, email, phone, password } = req.body || {};
+    const isAdmin = parseBoolean(req.body?.isAdmin, false);
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "Email and password are required" });
+    }
+
+    let uploadedImage = {};
+    if (req.file) {
+      uploadedImage = await uploadImageToCloudinary(req.file);
+    }
+
+    const supabaseAdmin = createSupabaseAdminClient();
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      app_metadata: { isAdmin },
+      user_metadata: {
+        name: name || "",
+        phone: phone || "",
+        image: uploadedImage.imageUrl || "",
+      },
+    });
+
+    if (error) {
+      if ((error.message || "").toLowerCase().includes("already")) {
+        return res.status(400).json({ success: false, message: "User with this email already exists" });
+      }
+      return res.status(400).json({ success: false, message: error.message });
+    }
+
+    const profileError = await upsertUserProfile(supabaseAdmin, data.user, {
+      name,
+      phone,
+      image: uploadedImage.imageUrl || "",
+    });
+
+    return res.status(201).json({
+      success: true,
+      userId: data.user?.id,
+      email: data.user?.email,
+      isAdmin: getSupabaseUserIsAdmin(data.user),
+      profileStored: !profileError,
+      profileMessage: profileError
+        ? `Auth user created but profile upsert failed: ${profileError.message}`
+        : "Profile stored in user_profiles",
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Registration failed" });
+  }
+});
 
 router.put("/:id", uploadOptions.single("image"), async (req, res) => {
   try {
@@ -222,17 +305,27 @@ router.put("/:id", uploadOptions.single("image"), async (req, res) => {
 
 router.post("/login", async (req, res) => {
   try {
-    const user = await User.findOne({ email: req.body.email });
-    if (!user) {
-      return res.status(400).json({ success: false, message: "The user was not found" });
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "Email and password are required" });
     }
 
-    if (!bcrypt.compareSync(req.body.password, user.passwordHash)) {
-      return res.status(400).json({ success: false, message: "Password is wrong" });
+    const supabaseClient = createSupabasePublicClient();
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error || !data?.user || !data?.session?.access_token) {
+      return res.status(400).json({ success: false, message: error?.message || "Invalid email or password" });
     }
 
-    const token = signUserToken(user);
-    return res.status(200).send({ user: user.email, token, userId: user.id, isAdmin: user.isAdmin });
+    return res.status(200).send({
+      user: data.user.email,
+      token: data.session.access_token,
+      userId: data.user.id,
+      isAdmin: getSupabaseUserIsAdmin(data.user),
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message || "Login failed" });
   }

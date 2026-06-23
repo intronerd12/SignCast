@@ -19,7 +19,7 @@ const aslSamples = [
   { phrase: 'Yes', confidence: 89, motion: 'Closed fist nod', stability: 'Stable' },
 ]
 
-function Header({ route, isAuthenticated, onLogout }) {
+function Header({ route, isAuthenticated, session, onLogout }) {
   return (
     <header className="site-header">
       <BrandLockup />
@@ -33,7 +33,8 @@ function Header({ route, isAuthenticated, onLogout }) {
         )}
         {isAuthenticated && (
           <>
-            <a className={route === 'app' ? 'active' : ''} href="#/app">App</a>
+            {session?.isAdmin && <a className={route === 'admin' ? 'active' : ''} href="#/admin">Admin</a>}
+            <a className={route === 'app' ? 'active' : ''} href="#/app">Home</a>
             <a className={route === 'library' ? 'active' : ''} href="#/library">Library</a>
             <button type="button" className="app-logout" onClick={onLogout}>Logout</button>
           </>
@@ -446,6 +447,44 @@ function LibraryPage() {
   )
 }
 
+function AdminPage({ session, onLogout, onGoHome }) {
+  return (
+    <section className="library-layout">
+      <div className="panel-heading">
+        <p className="eyebrow">Admin dashboard</p>
+        <h2>SignCast administration</h2>
+        <p>{`Signed in as ${session?.email || 'admin'} with admin access.`}</p>
+      </div>
+
+      <div className="marketing-grid">
+        <article>
+          <div className="grid-icon">🛡️</div>
+          <span>Role</span>
+          <h3>Admin access enabled</h3>
+          <p>Only accounts with the Supabase admin role can reach this page.</p>
+        </article>
+        <article>
+          <div className="grid-icon">📊</div>
+          <span>System</span>
+          <h3>Operational overview</h3>
+          <p>Use this page for future user management, analytics, and content controls.</p>
+        </article>
+        <article>
+          <div className="grid-icon">🔐</div>
+          <span>Security</span>
+          <h3>Protected navigation</h3>
+          <p>Regular users are redirected to the home workspace and cannot enter this page.</p>
+        </article>
+      </div>
+
+      <div className="marketing-actions">
+        <button type="button" className="submit-button" onClick={onGoHome}>Go to home</button>
+        <button type="button" className="outline-button" onClick={onLogout}>Logout</button>
+      </div>
+    </section>
+  )
+}
+
 function App() {
   const [route, setRoute] = useState(getRoute)
   const [session, setSession] = useState(getSavedSession)
@@ -461,17 +500,23 @@ function App() {
   }, [])
 
   const isAuthenticated = Boolean(session?.token)
-  const isProtectedRoute = route === 'app' || route === 'library'
+  const isAdminRoute = route === 'admin'
+  const isProtectedRoute = route === 'app' || route === 'library' || isAdminRoute
 
   useEffect(() => {
     if (isProtectedRoute && !isAuthenticated) {
       window.location.hash = '#/login'
+      return
     }
-  }, [isAuthenticated, isProtectedRoute])
+
+    if (isAdminRoute && isAuthenticated && !session?.isAdmin) {
+      window.location.hash = '#/app'
+    }
+  }, [isAuthenticated, isAdminRoute, isProtectedRoute, session?.isAdmin])
 
   const handleLoggedIn = (newSession) => {
     setSession(newSession)
-    window.location.hash = '#/app'
+    window.location.hash = newSession?.isAdmin ? '#/admin' : '#/app'
   }
 
   const handleLogout = () => {
@@ -484,15 +529,17 @@ function App() {
     ? <LoginPage onLoggedIn={handleLoggedIn} />
     : route === 'register'
       ? <RegisterPage />
-      : route === 'library'
-        ? <LibraryPage />
-        : route === 'app'
-          ? <RecognitionWorkspace />
-          : <MarketingPage />
+      : route === 'admin'
+        ? <AdminPage session={session} onLogout={handleLogout} onGoHome={() => { window.location.hash = '#/app' }} />
+        : route === 'library'
+          ? <LibraryPage />
+          : route === 'app'
+            ? <RecognitionWorkspace />
+            : <MarketingPage />
 
   return (
     <div className="app-shell">
-      <Header route={route} isAuthenticated={isAuthenticated} onLogout={handleLogout} />
+      <Header route={route} isAuthenticated={isAuthenticated} session={session} onLogout={handleLogout} />
       <main>{page}</main>
     </div>
   )

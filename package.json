@@ -1,0 +1,9 @@
+﻿{
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "dev": "npm --prefix backend run dev",
+    "seed:supabase-users": "npm --prefix backend run seed:supabase-users",
+    "init:supabase-data": "npm --prefix backend run init:supabase-data"
+  }
+}

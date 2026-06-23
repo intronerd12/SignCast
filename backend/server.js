@@ -4,6 +4,13 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const usersRouter = require('./routes/users');
 const recognitionRouter = require("./routes/recognition");
+const dataRouter = require('./routes/data');
+const {
+  getMissingSupabaseEnv,
+  getMissingSupabasePublicEnv,
+  verifySupabaseConnection,
+  verifySupabaseTables,
+} = require('./utils/supabaseClient');
 
 dotenv.config();
 
@@ -11,6 +18,7 @@ const app = express();
 
 const PORT = process.env.PORT || 5000;
 const API_PREFIX = '/api/v1';
+const MONGO_DB_NAME = process.env.MONGO_DB_NAME ;
 
 app.use(cors());
 app.use(express.json());
@@ -18,6 +26,7 @@ app.use('/public/uploads', express.static(__dirname + '/public/uploads'));
 
 app.use(`${API_PREFIX}/users`, usersRouter);
 app.use(`${API_PREFIX}/recognition`, recognitionRouter);
+app.use(`${API_PREFIX}/data`, dataRouter);
 
 app.get(API_PREFIX, (req, res) => {
   res.json({
@@ -28,75 +37,51 @@ app.get(API_PREFIX, (req, res) => {
 });
 
 app.get(`${API_PREFIX}/health`, (req, res) => {
+  const missingSupabaseEnv = getMissingSupabaseEnv();
+  const missingSupabasePublicEnv = getMissingSupabasePublicEnv();
+
   res.json({
     status: 'ok',
-    mongoConnected: mongoose.connection.readyState === 1
+    mongoConnected: mongoose.connection.readyState === 1,
+    supabaseConfigured: missingSupabaseEnv.length === 0,
+    missingSupabaseEnv,
+    supabasePublicConfigured: missingSupabasePublicEnv.length === 0,
+    missingSupabasePublicEnv,
+    tableBootstrapFile: 'backend/supabase/init.sql',
   });
 });
 
-const DIRECT_MONGO_HOSTS = [
-  'ac-j8fqpfd-shard-00-00.evoccgn.mongodb.net:27017',
-  'ac-j8fqpfd-shard-00-01.evoccgn.mongodb.net:27017',
-  'ac-j8fqpfd-shard-00-02.evoccgn.mongodb.net:27017'
-];
-
-const buildDirectMongoUri = (mongoUri) => {
-  try {
-    const parsedUri = new URL(mongoUri);
-
-    if (parsedUri.protocol !== 'mongodb+srv:') {
-      return null;
-    }
-
-    const username = encodeURIComponent(parsedUri.username);
-    const password = encodeURIComponent(parsedUri.password);
-    const credentials = username ? `${username}:${password}@` : '';
-    const databaseName = parsedUri.pathname && parsedUri.pathname !== '/'
-      ? parsedUri.pathname.slice(1)
-      : 'SignCast';
-
-    parsedUri.searchParams.set('ssl', 'true');
-    parsedUri.searchParams.set('authSource', 'admin');
-    parsedUri.searchParams.set('replicaSet', 'atlas-jqz6t9-shard-0');
-
-    return `mongodb://${credentials}${DIRECT_MONGO_HOSTS.join(',')}/${databaseName}?${parsedUri.searchParams.toString()}`;
-  } catch (error) {
-    return null;
-  }
-};
-
 const startServer = async () => {
   if (process.env.MONGO_URI) {
-    const directMongoUri = buildDirectMongoUri(process.env.MONGO_URI);
-
-    // Try SRV URI first
     try {
       await mongoose.connect(process.env.MONGO_URI, {
         serverSelectionTimeoutMS: 8000
       });
       console.log('Connected to MongoDB');
-    } catch (srvError) {
-      // SRV DNS lookup may fail on some networks — fall back to direct hosts
-      if (srvError.message.includes('querySrv') || srvError.message.includes('ECONNREFUSED') || srvError.message.includes('DNS')) {
-        console.warn('SRV DNS lookup failed. Retrying MongoDB with direct host URI...');
-        if (!directMongoUri) {
-          console.error('Failed to build direct MongoDB fallback URI from MONGO_URI');
-        } else {
-          try {
-            await mongoose.connect(directMongoUri, {
-              serverSelectionTimeoutMS: 8000
-            });
-            console.log('Connected to MongoDB using direct URI fallback');
-          } catch (directError) {
-            console.error('Failed to connect to MongoDB (direct):', directError.message);
-          }
-        }
-      } else {
-        console.error('Failed to connect to MongoDB:', srvError.message);
-      }
+    } catch (error) {
+      console.error('Failed to connect to MongoDB:', error.message);
     }
   } else {
     console.warn('MONGO_URI is not set; skipping MongoDB connection');
+  }
+
+  const supabaseStatus = await verifySupabaseConnection();
+  if (supabaseStatus.ok) {
+    console.log('Supabase connection check: OK');
+  } else {
+    console.warn(`Supabase connection check: FAILED (${supabaseStatus.error})`);
+  }
+
+  const tableStatus = await verifySupabaseTables();
+  if (tableStatus.ok) {
+    console.log('Supabase tables check: OK (user_profiles, app_events)');
+  } else {
+    const failed = tableStatus.results.filter((item) => !item.ok);
+    console.warn('Supabase tables check: FAILED');
+    failed.forEach((item) => {
+      console.warn(`- ${item.table}: ${item.error}`);
+    });
+    console.warn('Run backend/supabase/init.sql in Supabase SQL Editor to create missing tables.');
   }
 
   app.listen(PORT, () => {
