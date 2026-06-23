@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
+const path = require('path');
 const dotenv = require('dotenv');
 const usersRouter = require('./routes/users');
 const recognitionRouter = require("./routes/recognition");
@@ -12,13 +12,12 @@ const {
   verifySupabaseTables,
 } = require('./utils/supabaseClient');
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 
 const PORT = process.env.PORT || 5000;
 const API_PREFIX = '/api/v1';
-const MONGO_DB_NAME = process.env.MONGO_DB_NAME ;
 
 app.use(cors());
 app.use(express.json());
@@ -42,7 +41,6 @@ app.get(`${API_PREFIX}/health`, (req, res) => {
 
   res.json({
     status: 'ok',
-    mongoConnected: mongoose.connection.readyState === 1,
     supabaseConfigured: missingSupabaseEnv.length === 0,
     missingSupabaseEnv,
     supabasePublicConfigured: missingSupabasePublicEnv.length === 0,
@@ -52,19 +50,6 @@ app.get(`${API_PREFIX}/health`, (req, res) => {
 });
 
 const startServer = async () => {
-  if (process.env.MONGO_URI) {
-    try {
-      await mongoose.connect(process.env.MONGO_URI, {
-        serverSelectionTimeoutMS: 8000
-      });
-      console.log('Connected to MongoDB');
-    } catch (error) {
-      console.error('Failed to connect to MongoDB:', error.message);
-    }
-  } else {
-    console.warn('MONGO_URI is not set; skipping MongoDB connection');
-  }
-
   const supabaseStatus = await verifySupabaseConnection();
   if (supabaseStatus.ok) {
     console.log('Supabase connection check: OK');
@@ -74,7 +59,8 @@ const startServer = async () => {
 
   const tableStatus = await verifySupabaseTables();
   if (tableStatus.ok) {
-    console.log('Supabase tables check: OK (user_profiles, app_events)');
+    const checkedTables = (tableStatus.results || []).map((item) => item.table).join(', ');
+    console.log(`Supabase tables check: OK (${checkedTables})`);
   } else {
     const failed = tableStatus.results.filter((item) => !item.ok);
     console.warn('Supabase tables check: FAILED');

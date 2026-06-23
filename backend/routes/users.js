@@ -1,11 +1,8 @@
 const express = require("express");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const { v2: cloudinary } = require("cloudinary");
 const crypto = require("crypto");
 const https = require("https");
-const User = require("../models/User");
 const {
   createSupabaseAdminClient,
   createSupabasePublicClient,
@@ -106,33 +103,9 @@ const fetchGoogleProfile = (accessToken) => {
   });
 };
 
-const signUserToken = (user) => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("Server authentication is not configured. Set JWT_SECRET.");
-  }
+const signUserToken = null; // removed — Supabase issues tokens
 
-  return jwt.sign(
-    {
-      userId: user.id,
-      isAdmin: user.isAdmin,
-    },
-    secret,
-    { expiresIn: "1d" }
-  );
-};
-
-const buildUserPayload = (body, existingUser = {}) => ({
-  name: body.name,
-  email: body.email,
-  phone: body.phone,
-  isAdmin: parseBoolean(body.isAdmin, existingUser?.isAdmin || false),
-  street: body.street,
-  apartment: body.apartment,
-  zip: body.zip,
-  city: body.city,
-  country: body.country,
-});
+const buildUserPayload = null; // removed — Supabase handles user fields
 
 const getSupabaseUserIsAdmin = (user) =>
   Boolean(user?.app_metadata?.isAdmin || user?.user_metadata?.isAdmin);
@@ -160,10 +133,22 @@ const upsertUserProfile = async (supabaseAdmin, user, profile = {}) => {
   return error;
 };
 
+const formatUser = (u) => ({
+  id: u.id,
+  email: u.email,
+  name: u.user_metadata?.name || "",
+  phone: u.user_metadata?.phone || "",
+  isAdmin: getSupabaseUserIsAdmin(u),
+  image: u.user_metadata?.image || "",
+  createdAt: u.created_at,
+});
+
 router.get("/", async (req, res) => {
   try {
-    const userList = await User.find().select("-passwordHash");
-    return res.send(userList);
+    const supabase = createSupabaseAdminClient();
+    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 100 });
+    if (error) return res.status(400).json({ success: false, message: error.message });
+    return res.json((data?.users || []).map(formatUser));
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -171,8 +156,10 @@ router.get("/", async (req, res) => {
 
 router.get("/get/count", async (req, res) => {
   try {
-    const userCount = await User.countDocuments();
-    return res.send({ userCount });
+    const supabase = createSupabaseAdminClient();
+    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 });
+    if (error) return res.status(400).json({ success: false, message: error.message });
+    return res.json({ userCount: data?.total ?? (data?.users || []).length });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -180,11 +167,12 @@ router.get("/get/count", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select("-passwordHash");
-    if (!user) {
+    const supabase = createSupabaseAdminClient();
+    const { data, error } = await supabase.auth.admin.getUserById(req.params.id);
+    if (error || !data?.user) {
       return res.status(404).json({ message: "The user with the given ID was not found." });
     }
-    return res.status(200).send(user);
+    return res.status(200).json(formatUser(data.user));
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -192,25 +180,46 @@ router.get("/:id", async (req, res) => {
 
 const createUser = async (req, res) => {
   try {
-    const file = req.file;
-    let uploadedImage = {};
+    const { name, email, phone, password } = req.body || {};
+    const isAdmin = parseBoolean(req.body?.isAdmin, false);
 
-    if (file) {
-      uploadedImage = await uploadImageToCloudinary(file);
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "Email and password are required" });
     }
 
-    const user = await User.create({
-      ...buildUserPayload(req.body),
-      passwordHash: bcrypt.hashSync(req.body.password, 10),
-      image: uploadedImage.imageUrl,
-      cloudinaryPublicId: uploadedImage.publicId,
+    let uploadedImage = {};
+    if (req.file) {
+      uploadedImage = await uploadImageToCloudinary(req.file);
+    }
+
+    const supabaseAdmin = createSupabaseAdminClient();
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      app_metadata: { isAdmin },
+      user_metadata: {
+        name: name || "",
+        phone: phone || "",
+        image: uploadedImage.imageUrl || "",
+      },
     });
 
-    return res.send(user);
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: "User with this email already exists" });
+    if (error) {
+      if ((error.message || "").toLowerCase().includes("already")) {
+        return res.status(400).json({ success: false, message: "User with this email already exists" });
+      }
+      return res.status(400).json({ success: false, message: error.message });
     }
+
+    await upsertUserProfile(supabaseAdmin, data.user, {
+      name,
+      phone,
+      image: uploadedImage.imageUrl || "",
+    });
+
+    return res.status(201).json(formatUser(data.user));
+  } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -274,30 +283,40 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
 
 router.put("/:id", uploadOptions.single("image"), async (req, res) => {
   try {
-    const userExist = await User.findById(req.params.id);
-    if (!userExist) {
+    const supabaseAdmin = createSupabaseAdminClient();
+    const { data: existing, error: fetchError } = await supabaseAdmin.auth.admin.getUserById(req.params.id);
+
+    if (fetchError || !existing?.user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const file = req.file;
     let uploadedImage = {};
-
-    if (file) {
-      uploadedImage = await uploadImageToCloudinary(file);
+    if (req.file) {
+      uploadedImage = await uploadImageToCloudinary(req.file);
     }
 
-    const updatePayload = {
-      ...buildUserPayload(req.body, userExist),
-      passwordHash: req.body.password ? bcrypt.hashSync(req.body.password, 10) : userExist.passwordHash,
-    };
+    const existingMeta = existing.user.user_metadata || {};
+    const updatedMeta = { ...existingMeta };
+    if (req.body.name) updatedMeta.name = req.body.name;
+    if (req.body.phone) updatedMeta.phone = req.body.phone;
+    if (uploadedImage.imageUrl) updatedMeta.image = uploadedImage.imageUrl;
 
-    if (file) {
-      updatePayload.image = uploadedImage.imageUrl;
-      updatePayload.cloudinaryPublicId = uploadedImage.publicId;
+    const updatePayload = { user_metadata: updatedMeta };
+    if (req.body.password) updatePayload.password = req.body.password;
+    if (req.body.isAdmin !== undefined) {
+      updatePayload.app_metadata = { isAdmin: parseBoolean(req.body.isAdmin) };
     }
 
-    const user = await User.findByIdAndUpdate(req.params.id, updatePayload, { new: true });
-    return res.send(user);
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, updatePayload);
+    if (error) return res.status(400).json({ success: false, message: error.message });
+
+    await upsertUserProfile(supabaseAdmin, data.user, {
+      name: updatedMeta.name,
+      phone: updatedMeta.phone,
+      image: updatedMeta.image,
+    });
+
+    return res.json(formatUser(data.user));
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -341,7 +360,7 @@ router.post("/google", async (req, res) => {
     let profile;
     try {
       profile = await fetchGoogleProfile(accessToken);
-    } catch (error) {
+    } catch {
       return res.status(401).json({ success: false, message: "Invalid Google token" });
     }
 
@@ -349,29 +368,45 @@ router.post("/google", async (req, res) => {
       return res.status(400).json({ success: false, message: "Google profile missing email" });
     }
 
-    let user = await User.findOne({ email: profile.email });
+    const supabaseAdmin = createSupabaseAdminClient();
 
-    if (!user) {
-      const randomPassword = crypto.randomBytes(32).toString("hex");
-      user = await User.create({
-        name: profile.name || profile.given_name || "SignCast User",
-        email: profile.email,
-        passwordHash: bcrypt.hashSync(randomPassword, 10),
-        phone: req.body.phone || "0000000000",
-        image: profile.picture || "",
-        isAdmin: false,
-      });
-    } else {
-      const updates = {};
-      if (!user.image && profile.picture) updates.image = profile.picture;
-      if (profile.name && profile.name !== user.name) updates.name = profile.name;
-      if (Object.keys(updates).length) {
-        user = await User.findByIdAndUpdate(user._id, updates, { new: true });
-      }
+    // Find existing user in Supabase by email
+    let page = 1;
+    let existingUser = null;
+    while (!existingUser) {
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 200 });
+      if (error) return res.status(400).json({ success: false, message: error.message });
+      const users = data?.users || [];
+      existingUser = users.find((u) => u.email?.toLowerCase() === profile.email.toLowerCase()) || null;
+      if (existingUser || users.length < 200) break;
+      page += 1;
     }
 
-    const token = signUserToken(user);
-    return res.status(200).send({ user: user.email, token, userId: user.id, isAdmin: user.isAdmin });
+    if (!existingUser) {
+      const randomPassword = crypto.randomBytes(32).toString("hex");
+      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email: profile.email,
+        password: randomPassword,
+        email_confirm: true,
+        user_metadata: {
+          name: profile.name || profile.given_name || "SignCast User",
+          image: profile.picture || "",
+          phone: req.body.phone || "",
+        },
+      });
+      if (createError) return res.status(400).json({ success: false, message: createError.message });
+      existingUser = newUser.user;
+      await upsertUserProfile(supabaseAdmin, existingUser, {
+        name: existingUser.user_metadata?.name || "",
+        phone: "",
+        image: profile.picture || "",
+      });
+    }
+
+    return res.status(200).json({
+      ...formatUser(existingUser),
+      note: "Use Supabase client-side signInWithIdToken to obtain a session token.",
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message || "Google login failed" });
   }
@@ -379,10 +414,9 @@ router.post("/google", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
+    const supabase = createSupabaseAdminClient();
+    const { error } = await supabase.auth.admin.deleteUser(req.params.id);
+    if (error) return res.status(400).json({ success: false, message: error.message });
     return res.status(200).json({ success: true, message: "User deleted" });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -392,24 +426,25 @@ router.delete("/:id", async (req, res) => {
 router.put("/:id/push-token", async (req, res) => {
   try {
     const { pushToken } = req.body;
+    const supabase = createSupabaseAdminClient();
 
-    if (pushToken) {
-      await User.updateMany({ pushToken }, { pushToken: "" });
-    }
+    const { data: profileData } = await supabase
+      .from("user_profiles")
+      .select("metadata")
+      .eq("id", req.params.id)
+      .single();
 
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { pushToken: pushToken || "" },
-      { new: true }
-    );
+    const existingMeta = profileData?.metadata || {};
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({ metadata: { ...existingMeta, pushToken: pushToken || "" } })
+      .eq("id", req.params.id);
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
+    if (error) return res.status(400).json({ success: false, message: error.message });
 
-    return res.send({
+    return res.json({
       success: true,
-      pushToken: user.pushToken,
+      pushToken: pushToken || "",
       message: pushToken ? "Token updated" : "Token removed",
     });
   } catch (error) {

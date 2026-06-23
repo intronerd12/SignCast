@@ -2,14 +2,12 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
 const SESSION_KEY = 'signcastAuth'
 
 const parseErrorMessage = async (response) => {
-  let payload = null
-
+  let payload
   try {
     payload = await response.json()
   } catch {
-    payload = null
+    return 'Request failed. Please try again.'
   }
-
   if (payload?.message) return payload.message
   if (payload?.error) return payload.error
   return 'Request failed. Please try again.'
