@@ -28,3 +28,6 @@ dist-ssr
 .env.local
 .env.*
 backend/.env
+
+# Local upload fallback files
+backend/public/uploads/

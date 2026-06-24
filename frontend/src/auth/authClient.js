@@ -42,6 +42,22 @@ export const clearSession = () => {
   window.sessionStorage.removeItem(SESSION_KEY)
 }
 
+export const updateSavedSession = (updates) => {
+  const currentSession = getSavedSession()
+  if (!currentSession) return null
+
+  const nextSession = {
+    ...currentSession,
+    ...updates,
+  }
+
+  const isRemembered = Boolean(window.localStorage.getItem(SESSION_KEY))
+  const target = isRemembered ? window.localStorage : window.sessionStorage
+  target.setItem(SESSION_KEY, JSON.stringify(nextSession))
+
+  return nextSession
+}
+
 export const loginUser = async ({ email, password, accessType, rememberMe }) => {
   const response = await fetch(`${API_BASE}/users/login`, {
     method: 'POST',
@@ -64,7 +80,12 @@ export const loginUser = async ({ email, password, accessType, rememberMe }) => 
     token: payload.token,
     userId: payload.userId,
     isAdmin: Boolean(payload.isAdmin),
+    isActive: payload.isActive !== false,
     email: payload.user,
+    name: payload.name || '',
+    phone: payload.phone || '',
+    image: payload.image || '',
+    createdAt: payload.createdAt || '',
     accessType,
   }
 

@@ -1,8 +1,14 @@
 const express = require("express");
 const multer = require("multer");
-const { v2: cloudinary } = require("cloudinary");
 const crypto = require("crypto");
+const fs = require("fs/promises");
 const https = require("https");
+const path = require("path");
+const {
+  cloudinary,
+  configureCloudinary,
+  isCloudinaryConfigured,
+} = require("../utils/cloudinaryClient");
 const {
   createSupabaseAdminClient,
   createSupabasePublicClient,
@@ -23,20 +29,41 @@ const uploadOptions = multer({
   },
 });
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
 const router = express.Router();
 
-const isCloudinaryConfigured = () =>
-  Boolean(
-    process.env.CLOUDINARY_CLOUD_NAME
-      && process.env.CLOUDINARY_API_KEY
-      && process.env.CLOUDINARY_API_SECRET
-  );
+const getPublicBaseUrl = () =>
+  (process.env.PUBLIC_API_URL || process.env.API_PUBLIC_URL || `http://localhost:${process.env.PORT || 5000}`)
+    .replace(/\/$/, "");
+
+const getSafeImageBaseName = (file) =>
+  (file.originalname || "user-image")
+    .split(".")
+    .slice(0, -1)
+    .join(".")
+    .replace(/[^a-zA-Z0-9-_]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase()
+    .slice(0, 50) || "user-image";
+
+const uploadImageLocally = async (file) => {
+  const extension = FILE_TYPE_MAP[file.mimetype];
+  if (!extension) {
+    throw new Error("Invalid image type");
+  }
+
+  const uploadDir = path.join(__dirname, "..", "public", "uploads", "users");
+  await fs.mkdir(uploadDir, { recursive: true });
+
+  const filename = `${getSafeImageBaseName(file)}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${extension}`;
+  const absolutePath = path.join(uploadDir, filename);
+  await fs.writeFile(absolutePath, file.buffer);
+
+  return {
+    imageUrl: `${getPublicBaseUrl()}/public/uploads/users/${filename}`,
+    publicId: `local/users/${filename}`,
+  };
+};
 
 const parseBoolean = (value, fallback = false) => {
   if (typeof value === "boolean") return value;
@@ -50,25 +77,28 @@ const parseBoolean = (value, fallback = false) => {
 
 const uploadImageToCloudinary = async (file) => {
   if (!isCloudinaryConfigured()) {
-    throw new Error("Cloudinary is not configured. Set Cloudinary environment variables.");
+    return uploadImageLocally(file);
   }
 
-  const baseName = (file.originalname || "user-image")
-    .split(".")
-    .slice(0, -1)
-    .join(".")
-    .replace(/[^a-zA-Z0-9-_]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .toLowerCase()
-    .slice(0, 50) || "user-image";
+  configureCloudinary();
+
+  const baseName = getSafeImageBaseName(file);
 
   const dataUri = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
-  const uploaded = await cloudinary.uploader.upload(dataUri, {
-    public_id: `signcast/users/${baseName}-${Date.now()}`,
-    resource_type: "image",
-    overwrite: false,
-  });
+  let uploaded;
+  try {
+    uploaded = await cloudinary.uploader.upload(dataUri, {
+      public_id: `signcast/users/${baseName}-${Date.now()}`,
+      resource_type: "image",
+      overwrite: false,
+    });
+  } catch (error) {
+    const message = (error.message || "").toLowerCase();
+    if (message.includes("api_key") || message.includes("api key") || message.includes("cloudinary")) {
+      return uploadImageLocally(file);
+    }
+    throw error;
+  }
 
   return {
     imageUrl: uploaded.secure_url,
@@ -110,6 +140,8 @@ const buildUserPayload = null; // removed — Supabase handles user fields
 const getSupabaseUserIsAdmin = (user) =>
   Boolean(user?.app_metadata?.isAdmin || user?.user_metadata?.isAdmin);
 
+const getSupabaseUserIsActive = (user) => user?.user_metadata?.isActive !== false;
+
 const upsertUserProfile = async (supabaseAdmin, user, profile = {}) => {
   const role = getSupabaseUserIsAdmin(user) ? "admin" : "user";
 
@@ -139,6 +171,7 @@ const formatUser = (u) => ({
   name: u.user_metadata?.name || "",
   phone: u.user_metadata?.phone || "",
   isAdmin: getSupabaseUserIsAdmin(u),
+  isActive: getSupabaseUserIsActive(u),
   image: u.user_metadata?.image || "",
   createdAt: u.created_at,
 });
@@ -202,6 +235,7 @@ const createUser = async (req, res) => {
         name: name || "",
         phone: phone || "",
         image: uploadedImage.imageUrl || "",
+        isActive: true,
       },
     });
 
@@ -250,6 +284,7 @@ router.post("/register", uploadOptions.single("image"), async (req, res) => {
         name: name || "",
         phone: phone || "",
         image: uploadedImage.imageUrl || "",
+        isActive: true,
       },
     });
 
@@ -322,6 +357,44 @@ router.put("/:id", uploadOptions.single("image"), async (req, res) => {
   }
 });
 
+router.put("/:id/status", async (req, res) => {
+  try {
+    const isActive = parseBoolean(req.body?.isActive, true);
+    const supabaseAdmin = createSupabaseAdminClient();
+    const { data: existing, error: fetchError } = await supabaseAdmin.auth.admin.getUserById(req.params.id);
+
+    if (fetchError || !existing?.user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const existingMeta = existing.user.user_metadata || {};
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, {
+      user_metadata: {
+        ...existingMeta,
+        isActive,
+      },
+    });
+
+    if (error) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+
+    await upsertUserProfile(supabaseAdmin, data.user, {
+      name: data.user.user_metadata?.name || "",
+      phone: data.user.user_metadata?.phone || "",
+      image: data.user.user_metadata?.image || "",
+    });
+
+    return res.json({
+      success: true,
+      user: formatUser(data.user),
+      message: isActive ? "User activated" : "User deactivated",
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Unable to update user status" });
+  }
+});
+
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body || {};
@@ -339,11 +412,20 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ success: false, message: error?.message || "Invalid email or password" });
     }
 
+    if (!getSupabaseUserIsActive(data.user)) {
+      return res.status(403).json({ success: false, message: "This account is deactivated. Contact your SignCast administrator." });
+    }
+
     return res.status(200).send({
       user: data.user.email,
       token: data.session.access_token,
       userId: data.user.id,
       isAdmin: getSupabaseUserIsAdmin(data.user),
+      isActive: getSupabaseUserIsActive(data.user),
+      name: data.user.user_metadata?.name || "",
+      phone: data.user.user_metadata?.phone || "",
+      image: data.user.user_metadata?.image || "",
+      createdAt: data.user.created_at,
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message || "Login failed" });

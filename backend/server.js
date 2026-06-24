@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
+
+dotenv.config({ path: path.join(__dirname, '.env') });
+
 const usersRouter = require('./routes/users');
 const recognitionRouter = require("./routes/recognition");
 const dataRouter = require('./routes/data');
@@ -11,8 +14,10 @@ const {
   verifySupabaseConnection,
   verifySupabaseTables,
 } = require('./utils/supabaseClient');
-
-dotenv.config({ path: path.join(__dirname, '.env') });
+const {
+  getMissingCloudinaryEnv,
+  verifyCloudinaryConnection,
+} = require('./utils/cloudinaryClient');
 
 const app = express();
 
@@ -38,6 +43,7 @@ app.get(API_PREFIX, (req, res) => {
 app.get(`${API_PREFIX}/health`, (req, res) => {
   const missingSupabaseEnv = getMissingSupabaseEnv();
   const missingSupabasePublicEnv = getMissingSupabasePublicEnv();
+  const missingCloudinaryEnv = getMissingCloudinaryEnv();
 
   res.json({
     status: 'ok',
@@ -45,6 +51,8 @@ app.get(`${API_PREFIX}/health`, (req, res) => {
     missingSupabaseEnv,
     supabasePublicConfigured: missingSupabasePublicEnv.length === 0,
     missingSupabasePublicEnv,
+    cloudinaryConfigured: missingCloudinaryEnv.length === 0,
+    missingCloudinaryEnv,
     tableBootstrapFile: 'backend/supabase/init.sql',
   });
 });
@@ -55,6 +63,13 @@ const startServer = async () => {
     console.log('Supabase connection check: OK');
   } else {
     console.warn(`Supabase connection check: FAILED (${supabaseStatus.error})`);
+  }
+
+  const cloudinaryStatus = await verifyCloudinaryConnection();
+  if (cloudinaryStatus.ok) {
+    console.log('Cloudinary connection check: OK');
+  } else {
+    console.warn(`Cloudinary connection check: FAILED (${cloudinaryStatus.error})`);
   }
 
   const tableStatus = await verifySupabaseTables();
