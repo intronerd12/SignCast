@@ -62,6 +62,7 @@ const verifySupabaseTables = async () => {
     const checks = [
       { table: "user_profiles", query: client.from("user_profiles").select("id").limit(1) },
       { table: "app_events", query: client.from("app_events").select("id").limit(1) },
+      { table: "fsl_sign_samples", query: client.from("fsl_sign_samples").select("id").limit(1) },
     ];
 
     const results = [];

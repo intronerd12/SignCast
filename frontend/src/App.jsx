@@ -19,6 +19,20 @@ const aslSamples = [
   { phrase: 'Yes', confidence: 89, motion: 'Closed fist nod', stability: 'Stable' },
 ]
 
+const normalizeConfidence = (value, fallback = 80) => {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(1, Math.min(100, Math.round(parsed)))
+}
+
+const normalizeLibraryEntry = (sample) => ({
+  phrase: (sample?.phrase || '').toString().trim() || 'Unknown sign',
+  confidence: normalizeConfidence(sample?.confidence, 80),
+  motion: (sample?.motion || '').toString().trim(),
+  gloss: (sample?.gloss || '').toString().trim(),
+  source: (sample?.source || '').toString().trim() || 'prototype-rule-engine',
+})
+
 function Header({ route, isAuthenticated, session, onLogout }) {
   return (
     <header className="site-header">
@@ -35,12 +49,260 @@ function Header({ route, isAuthenticated, session, onLogout }) {
           <>
             {session?.isAdmin && <a className={route === 'admin' ? 'active' : ''} href="#/admin">Admin</a>}
             <a className={route === 'app' ? 'active' : ''} href="#/app">Home</a>
+            <a className={route === 'trainer' ? 'active' : ''} href="#/trainer">Trainer</a>
             <a className={route === 'library' ? 'active' : ''} href="#/library">Library</a>
             <button type="button" className="app-logout" onClick={onLogout}>Logout</button>
           </>
         )}
       </nav>
     </header>
+  )
+}
+
+function TrainerPage({ session }) {
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const [cameraState, setCameraState] = useState('off')
+  const [isSaving, setIsSaving] = useState(false)
+  const [status, setStatus] = useState('Start camera and record FSL samples to build your training dataset.')
+  const [stats, setStats] = useState({ totalSamples: 0, uniqueLabels: 0, byLabel: [] })
+  const [recentSamples, setRecentSamples] = useState([])
+  const [form, setForm] = useState({
+    label: '',
+    category: 'word',
+    notes: '',
+  })
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    setCameraState('off')
+  }
+
+  useEffect(() => () => {
+    stopCamera()
+  }, [])
+
+  const loadStats = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/recognition/teach/stats?limit=1000`)
+      const data = await response.json()
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || 'Unable to load stats')
+      }
+      setStats({
+        totalSamples: data.totalSamples || 0,
+        uniqueLabels: data.uniqueLabels || 0,
+        byLabel: Array.isArray(data.byLabel) ? data.byLabel : [],
+      })
+    } catch {
+      setStats({ totalSamples: 0, uniqueLabels: 0, byLabel: [] })
+    }
+  }
+
+  const loadRecent = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/recognition/teach?limit=8`)
+      const data = await response.json()
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || 'Unable to load samples')
+      }
+      setRecentSamples(Array.isArray(data.samples) ? data.samples : [])
+    } catch {
+      setRecentSamples([])
+    }
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      loadStats()
+      loadRecent()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  const startCamera = async () => {
+    setStatus('Opening camera...')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      })
+
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+      setCameraState('active')
+      setStatus('Camera active. Perform your sign, then click Save camera sample.')
+    } catch {
+      setCameraState('blocked')
+      setStatus('Camera access denied. Allow permission and try again.')
+    }
+  }
+
+  const saveCameraSample = async () => {
+    const label = form.label.trim().toLowerCase()
+
+    if (!label) {
+      setStatus('Label is required before saving a camera sample.')
+      return
+    }
+
+    if (cameraState !== 'active') {
+      setStatus('Start the camera first before saving a sample.')
+      return
+    }
+
+    const payload = {
+      userId: session?.userId || null,
+      label,
+      category: form.category,
+      notes: form.notes.trim(),
+      source: 'camera-capture',
+      device: 'webcam',
+      confidence: 75,
+      frameCount: 1,
+      durationMs: 1000,
+      landmarks: [
+        {
+          captureMode: 'manual-camera-sample',
+          capturedAt: new Date().toISOString(),
+        },
+      ],
+    }
+
+    setIsSaving(true)
+    setStatus('Saving camera sample...')
+
+    try {
+      const response = await fetch(`${API_BASE}/recognition/teach`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await response.json()
+
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || 'Unable to save sample')
+      }
+
+      setStatus(`Stored sample for "${data?.sample?.phrase || label}". Your dataset has been updated.`)
+      await loadStats()
+      await loadRecent()
+    } catch (error) {
+      setStatus(error.message || 'Unable to save sample')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <section className="trainer-layout">
+      <div className="phone-stage" aria-label="FSL training camera">
+        <div className="camera-panel">
+          <video ref={videoRef} className="camera-feed" autoPlay muted playsInline />
+          {cameraState !== 'active' && (
+            <div className="camera-placeholder">
+              <span className="scan-frame" />
+              <strong>FSL Trainer Camera</strong>
+              <small>{cameraState === 'blocked' ? 'Enable camera permission in your browser.' : 'Camera preview is off.'}</small>
+            </div>
+          )}
+        </div>
+
+        <div className="control-dock">
+          <button type="button" onClick={cameraState === 'active' ? stopCamera : startCamera}>
+            {cameraState === 'active' ? 'Stop camera' : 'Start camera'}
+          </button>
+          <button type="button" onClick={saveCameraSample} disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save camera sample'}
+          </button>
+        </div>
+      </div>
+
+      <aside className="workspace-panel">
+        <div className="panel-heading">
+          <p className="eyebrow">FSL training dataset</p>
+          <h2>Collect and train from your camera</h2>
+          <p>{status}</p>
+        </div>
+
+        <form className="teach-form" onSubmit={(event) => { event.preventDefault(); saveCameraSample() }}>
+          <label className="field">
+            <span>Label (required)</span>
+            <input
+              type="text"
+              value={form.label}
+              onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))}
+              placeholder="e.g. mahal kita"
+              required
+            />
+          </label>
+
+          <label className="field">
+            <span>Category</span>
+            <select
+              value={form.category}
+              onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+            >
+              <option value="alphabet">Alphabet</option>
+              <option value="word">Word</option>
+              <option value="phrase">Phrase</option>
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Notes</span>
+            <textarea
+              value={form.notes}
+              onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
+              rows={3}
+              placeholder="Hand shape, direction, speed, and any teaching hints"
+            />
+          </label>
+        </form>
+
+        <div className="feature-grid">
+          <article>
+            <strong>Total samples</strong>
+            <span>{stats.totalSamples}</span>
+          </article>
+          <article>
+            <strong>Unique labels</strong>
+            <span>{stats.uniqueLabels}</span>
+          </article>
+          <article>
+            <strong>Top label</strong>
+            <span>{stats.byLabel[0]?.phrase || 'No data yet'}</span>
+          </article>
+        </div>
+
+        <section className="teach-log" aria-label="Recent training samples">
+          <div className="transcript-header">
+            <span>Recent camera samples</span>
+            <button type="button" onClick={() => { loadStats(); loadRecent() }}>Refresh</button>
+          </div>
+
+          {recentSamples.length === 0 ? (
+            <p className="sentence">No training samples yet. Save your first camera sample.</p>
+          ) : (
+            <ul className="teach-list">
+              {recentSamples.map((sample) => (
+                <li key={sample.id}>
+                  <strong>{sample.phrase || sample.label}</strong>
+                  <span>{sample.category || 'uncategorized'} • {sample.source || 'manual'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </aside>
+    </section>
   )
 }
 
@@ -232,7 +494,7 @@ function MarketingPage() {
   )
 }
 
-function RecognitionWorkspace() {
+function RecognitionWorkspace({ session }) {
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const [cameraState, setCameraState] = useState('off')
@@ -253,7 +515,9 @@ function RecognitionWorkspace() {
     return () => window.clearInterval(timer)
   }, [cameraState])
 
-  useEffect(() => () => stopCamera(), [])
+  useEffect(() => () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+  }, [])
 
   const startCamera = async () => {
     setApiStatus('Opening camera')
@@ -270,7 +534,7 @@ function RecognitionWorkspace() {
       }
       setCameraState('active')
       setApiStatus('Camera active')
-    } catch (error) {
+    } catch {
       setCameraState('blocked')
       setApiStatus('Camera permission needed')
     }
@@ -290,6 +554,7 @@ function RecognitionWorkspace() {
       landmarks: [],
       hint: currentSign.phrase,
       source: 'web-prototype',
+      userId: session?.userId || null,
     }
 
     try {
@@ -313,7 +578,7 @@ function RecognitionWorkspace() {
         },
       ])
       setApiStatus('Saved to transcript')
-    } catch (error) {
+    } catch {
       setTranscript((current) => [...current, currentSign])
       setApiStatus('Saved locally')
     }
@@ -427,19 +692,218 @@ function RecognitionWorkspace() {
   )
 }
 
-function LibraryPage() {
+function LibraryPage({ session }) {
+  const [librarySigns, setLibrarySigns] = useState(aslSamples.map((sample) => normalizeLibraryEntry(sample)))
+  const [recentSamples, setRecentSamples] = useState([])
+  const [libraryStatus, setLibraryStatus] = useState('Loading sign library...')
+  const [formStatus, setFormStatus] = useState('Store a sign sample to start teaching your FSL model.')
+  const [isSaving, setIsSaving] = useState(false)
+  const [teachingForm, setTeachingForm] = useState({
+    label: '',
+    phrase: '',
+    gloss: '',
+    notes: '',
+  })
+
+  const loadLibrary = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/recognition/library?limit=80`)
+      const data = await response.json()
+
+      if (!response.ok || !Array.isArray(data)) {
+        throw new Error(data?.message || 'Unable to load sign library')
+      }
+
+      const mapped = data.map((sample) => normalizeLibraryEntry(sample)).filter((item) => item.phrase)
+      const nextLibrary = mapped.length > 0
+        ? mapped
+        : aslSamples.map((sample) => normalizeLibraryEntry(sample))
+
+      setLibrarySigns(nextLibrary)
+      setLibraryStatus(`Loaded ${nextLibrary.length} signs from API`)
+    } catch {
+      setLibrarySigns(aslSamples.map((sample) => normalizeLibraryEntry(sample)))
+      setLibraryStatus('Using local sign library fallback')
+    }
+  }
+
+  const loadRecentSamples = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/recognition/teach?limit=10`)
+      const data = await response.json()
+
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || 'Unable to load taught samples')
+      }
+
+      setRecentSamples(Array.isArray(data.samples) ? data.samples : [])
+    } catch {
+      setRecentSamples([])
+    }
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      loadLibrary()
+      loadRecentSamples()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  const handleFieldChange = (event) => {
+    const { name, value } = event.target
+    setTeachingForm((current) => ({
+      ...current,
+      [name]: value,
+    }))
+  }
+
+  const handleTeachSign = async (event) => {
+    event.preventDefault()
+
+    const label = teachingForm.label.trim().toLowerCase()
+    if (!label) {
+      setFormStatus('Label is required to store a sign sample.')
+      return
+    }
+
+    setIsSaving(true)
+    setFormStatus('Saving sign sample...')
+
+    const payload = {
+      userId: session?.userId || null,
+      label,
+      phrase: teachingForm.phrase.trim() || label,
+      gloss: teachingForm.gloss.trim(),
+      notes: teachingForm.notes.trim(),
+      landmarks: [],
+      source: 'web-library-form',
+      confidence: 78,
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/recognition/teach`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await response.json()
+
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || 'Unable to save sign sample')
+      }
+
+      setTeachingForm({
+        label: '',
+        phrase: '',
+        gloss: '',
+        notes: '',
+      })
+      setFormStatus('Sign sample stored. Recognition can now learn from it.')
+      await loadLibrary()
+      await loadRecentSamples()
+    } catch (error) {
+      setFormStatus(error.message || 'Unable to save sign sample')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
     <section className="library-layout">
       <div className="panel-heading">
-        <p className="eyebrow">ASL phrase library</p>
-        <h2>Core signs for prototype testing</h2>
+        <p className="eyebrow">FSL learning library</p>
+        <h2>Teach SignCast with stored sign information</h2>
+        <p>
+          Add labeled FSL signs, keep your examples in storage, and reuse them in recognition.
+        </p>
       </div>
+
+      <div className="teaching-layout">
+        <form className="teach-form" onSubmit={handleTeachSign}>
+          <label className="field">
+            <span>Label (required)</span>
+            <input
+              type="text"
+              name="label"
+              value={teachingForm.label}
+              onChange={handleFieldChange}
+              placeholder="e.g. kumusta"
+              required
+            />
+          </label>
+
+          <label className="field">
+            <span>Phrase</span>
+            <input
+              type="text"
+              name="phrase"
+              value={teachingForm.phrase}
+              onChange={handleFieldChange}
+              placeholder="e.g. Kumusta"
+            />
+          </label>
+
+          <label className="field">
+            <span>Gloss</span>
+            <input
+              type="text"
+              name="gloss"
+              value={teachingForm.gloss}
+              onChange={handleFieldChange}
+              placeholder="e.g. KUMUSTA"
+            />
+          </label>
+
+          <label className="field">
+            <span>Notes</span>
+            <textarea
+              name="notes"
+              value={teachingForm.notes}
+              onChange={handleFieldChange}
+              placeholder="Optional tip on hand shape or motion"
+              rows={4}
+            />
+          </label>
+
+          <button type="submit" className="submit-button" disabled={isSaving}>
+            {isSaving ? 'Saving sample...' : 'Teach this sign'}
+          </button>
+
+          <p className={formStatus.includes('stored') ? 'form-message success' : 'form-message'}>{formStatus}</p>
+        </form>
+
+        <section className="teach-log" aria-label="Recent taught samples">
+          <div className="transcript-header">
+            <span>Recent taught samples</span>
+            <button type="button" onClick={loadRecentSamples}>Refresh</button>
+          </div>
+
+          {recentSamples.length === 0 ? (
+            <p className="sentence">No stored samples yet. Add your first FSL label.</p>
+          ) : (
+            <ul className="teach-list">
+              {recentSamples.map((sample) => (
+                <li key={sample.id}>
+                  <strong>{sample.phrase || sample.label}</strong>
+                  <span>{sample.gloss}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      <p className="library-status">{libraryStatus}</p>
+
       <div className="sign-library">
-        {aslSamples.map((sample) => (
-          <article key={sample.phrase}>
+        {librarySigns.map((sample, index) => (
+          <article key={`${sample.phrase}-${sample.source}-${index}`}>
             <span>{sample.confidence}%</span>
             <h3>{sample.phrase}</h3>
-            <p>{sample.motion}</p>
+            <p>{sample.gloss ? `Gloss: ${sample.gloss}` : sample.motion || 'Stored sign sample'}</p>
+            <small className="library-source">{sample.source === 'learned-dataset' ? 'Learned sample' : 'Prototype sample'}</small>
           </article>
         ))}
       </div>
@@ -532,9 +996,11 @@ function App() {
       : route === 'admin'
         ? <AdminPage session={session} onLogout={handleLogout} onGoHome={() => { window.location.hash = '#/app' }} />
         : route === 'library'
-          ? <LibraryPage />
+          ? <LibraryPage session={session} />
+          : route === 'trainer'
+            ? <TrainerPage session={session} />
           : route === 'app'
-            ? <RecognitionWorkspace />
+            ? <RecognitionWorkspace session={session} />
             : <MarketingPage />
 
   return (
