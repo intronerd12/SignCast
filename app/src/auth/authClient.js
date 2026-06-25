@@ -38,6 +38,15 @@ export const clearSession = async () => {
   await AsyncStorage.removeItem(SESSION_KEY)
 }
 
+export const updateSavedSession = async (updates) => {
+  const currentSession = await getSavedSession()
+  if (!currentSession) return null
+
+  const nextSession = { ...currentSession, ...updates }
+  await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(nextSession))
+  return nextSession
+}
+
 export const loginUser = async ({ email, password, accessType, rememberMe = true }) => {
   const response = await fetch(`${API_BASE}/users/login`, {
     method: 'POST',
@@ -60,7 +69,12 @@ export const loginUser = async ({ email, password, accessType, rememberMe = true
     token: payload.token,
     userId: payload.userId,
     isAdmin: Boolean(payload.isAdmin),
+    isActive: payload.isActive !== false,
     email: payload.user,
+    name: payload.name || '',
+    phone: payload.phone || '',
+    image: payload.image || '',
+    createdAt: payload.createdAt || '',
     accessType,
   }
 

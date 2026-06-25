@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
@@ -25,8 +26,51 @@ const INITIAL_REGISTER = {
   name: '',
   email: '',
   phone: '',
+  purpose: 'fsl-user',
   password: '',
   confirmPassword: '',
+}
+
+const PURPOSE_OPTIONS = [
+  { label: 'FSL user', value: 'fsl-user' },
+  { label: 'FSL learner', value: 'learner' },
+  { label: 'Interpreter or educator', value: 'interpreter' },
+  { label: 'Accessibility support', value: 'support' },
+]
+
+// Custom Select Dropdown (no native picker needed — works in Expo Go)
+function CustomSelect({ options, value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const selected = options.find((o) => o.value === value) || options[0]
+
+  return (
+    <>
+      <Pressable onPress={() => setOpen(true)} style={styles.customSelectTrigger}>
+        <Text style={styles.customSelectValue}>{selected?.label}</Text>
+        <Text style={styles.customSelectChevron}>▾</Text>
+      </Pressable>
+
+      <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.customSelectOverlay} onPress={() => setOpen(false)}>
+          <View style={styles.customSelectSheet}>
+            <Text style={styles.customSelectSheetTitle}>Select purpose</Text>
+            {options.map((opt) => (
+              <Pressable
+                key={opt.value}
+                onPress={() => { onChange(opt.value); setOpen(false) }}
+                style={[styles.customSelectOption, opt.value === value && styles.customSelectOptionActive]}
+              >
+                <Text style={[styles.customSelectOptionText, opt.value === value && styles.customSelectOptionTextActive]}>
+                  {opt.label}
+                </Text>
+                {opt.value === value && <Text style={styles.customSelectCheck}>✓</Text>}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+    </>
+  )
 }
 
 // Visual Illustration Components
@@ -287,6 +331,7 @@ function LoginScreen({ onSuccess }) {
   const [form, setForm] = useState(INITIAL_LOGIN)
   const [status, setStatus] = useState({ type: '', message: '' })
   const [isLoading, setIsLoading] = useState(false)
+  const redirectTimer = useRef(null)
 
   const setField = (name, value) => {
     setForm((current) => ({ ...current, [name]: value }))
@@ -307,10 +352,13 @@ function LoginScreen({ onSuccess }) {
       setStatus({
         type: 'success',
         message: session.isAdmin
-          ? 'Admin login successful. Redirecting to admin home.'
+          ? 'Admin login successful. Redirecting to admin dashboard.'
           : 'Login successful. Redirecting to home page.',
       })
-      onSuccess(session)
+
+      redirectTimer.current = setTimeout(() => {
+        onSuccess(session)
+      }, 800)
     } catch (error) {
       setStatus({ type: 'error', message: error.message || 'Unable to login.' })
     } finally {
@@ -320,8 +368,9 @@ function LoginScreen({ onSuccess }) {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle}>Login to SignCast</Text>
-      <Text style={styles.cardBody}>Users can enter the FSL recognition app, while admins can access the web management area.</Text>
+      <Text style={styles.eyebrow}>Welcome back</Text>
+      <Text style={styles.cardTitle}>Sign in to your account</Text>
+      <Text style={styles.cardBody}>Choose the correct access type before logging in.</Text>
 
       <View style={styles.segmentRow}>
         <Pressable onPress={() => setField('accessType', 'user')} style={[styles.segmentButton, form.accessType === 'user' && styles.segmentActive]}>
@@ -332,23 +381,32 @@ function LoginScreen({ onSuccess }) {
         </Pressable>
       </View>
 
-      <TextInput
-        value={form.email}
-        onChangeText={(value) => setField('email', value)}
-        placeholder="Email address"
-        placeholderTextColor="#6f7f82"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        style={styles.input}
-      />
-      <TextInput
-        value={form.password}
-        onChangeText={(value) => setField('password', value)}
-        placeholder="Password"
-        placeholderTextColor="#6f7f82"
-        secureTextEntry
-        style={styles.input}
-      />
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Email address</Text>
+        <TextInput
+          value={form.email}
+          onChangeText={(value) => setField('email', value)}
+          placeholder="name@example.com"
+          placeholderTextColor="#6f7f82"
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          style={styles.input}
+        />
+      </View>
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Password</Text>
+        <TextInput
+          value={form.password}
+          onChangeText={(value) => setField('password', value)}
+          placeholder="Enter your password"
+          placeholderTextColor="#6f7f82"
+          secureTextEntry
+          autoComplete="current-password"
+          style={styles.input}
+        />
+      </View>
 
       <View style={styles.switchRow}>
         <Text style={styles.switchLabel}>Remember me</Text>
@@ -359,13 +417,13 @@ function LoginScreen({ onSuccess }) {
         <Text style={styles.primaryButtonText}>{isLoading ? 'Signing in...' : 'Sign in'}</Text>
       </Pressable>
 
-      <Pressable onPress={() => onSuccess(null, 'register')} style={styles.inlineLinkWrap}>
-        <Text style={styles.inlineLinkText}>No account yet? Register here</Text>
-      </Pressable>
-
       {!!status.message && (
         <Text style={[styles.message, status.type === 'error' ? styles.error : styles.success]}>{status.message}</Text>
       )}
+
+      <Pressable onPress={() => onSuccess(null, 'register')} style={styles.inlineLinkWrap}>
+        <Text style={styles.inlineLinkText}>No account yet? <Text style={styles.inlineLinkBold}>Create an account</Text></Text>
+      </Pressable>
     </View>
   )
 }
@@ -391,6 +449,7 @@ function RegisterScreen({ onSuccess }) {
   const [form, setForm] = useState(INITIAL_REGISTER)
   const [status, setStatus] = useState({ type: '', message: '' })
   const [isLoading, setIsLoading] = useState(false)
+  const redirectTimer = useRef(null)
 
   const setField = (name, value) => {
     setForm((current) => ({ ...current, [name]: value }))
@@ -418,9 +477,12 @@ function RegisterScreen({ onSuccess }) {
         password: form.password,
       })
 
-      setStatus({ type: 'success', message: 'Registration successful. You can now login.' })
+      setStatus({ type: 'success', message: 'Registration successful. Redirecting to login.' })
       setForm(INITIAL_REGISTER)
-      onSuccess()
+
+      redirectTimer.current = setTimeout(() => {
+        onSuccess()
+      }, 900)
     } catch (error) {
       setStatus({ type: 'error', message: error.message || 'Unable to create account.' })
     } finally {
@@ -430,61 +492,95 @@ function RegisterScreen({ onSuccess }) {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle}>Register for SignCast</Text>
-      <Text style={styles.cardBody}>Create a user account for the Filipino Sign Language recognition app.</Text>
+      <Text style={styles.eyebrow}>New account</Text>
+      <Text style={styles.cardTitle}>Start using SignCast</Text>
+      <Text style={styles.cardBody}>Use your real contact details so the admin team can manage access properly.</Text>
 
-      <TextInput
-        value={form.name}
-        onChangeText={(value) => setField('name', value)}
-        placeholder="Full name"
-        placeholderTextColor="#6f7f82"
-        style={styles.input}
-      />
-      <TextInput
-        value={form.email}
-        onChangeText={(value) => setField('email', value)}
-        placeholder="Email address"
-        placeholderTextColor="#6f7f82"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        style={styles.input}
-      />
-      <TextInput
-        value={form.phone}
-        onChangeText={(value) => setField('phone', value)}
-        placeholder="Phone number"
-        placeholderTextColor="#6f7f82"
-        keyboardType="phone-pad"
-        style={styles.input}
-      />
-      <TextInput
-        value={form.password}
-        onChangeText={(value) => setField('password', value)}
-        placeholder="Password"
-        placeholderTextColor="#6f7f82"
-        secureTextEntry
-        style={styles.input}
-      />
-      <TextInput
-        value={form.confirmPassword}
-        onChangeText={(value) => setField('confirmPassword', value)}
-        placeholder="Confirm password"
-        placeholderTextColor="#6f7f82"
-        secureTextEntry
-        style={styles.input}
-      />
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Full name</Text>
+        <TextInput
+          value={form.name}
+          onChangeText={(value) => setField('name', value)}
+          placeholder="Juan Dela Cruz"
+          placeholderTextColor="#6f7f82"
+          autoComplete="name"
+          style={styles.input}
+        />
+      </View>
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Email address</Text>
+        <TextInput
+          value={form.email}
+          onChangeText={(value) => setField('email', value)}
+          placeholder="name@example.com"
+          placeholderTextColor="#6f7f82"
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          style={styles.input}
+        />
+      </View>
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Phone number</Text>
+        <TextInput
+          value={form.phone}
+          onChangeText={(value) => setField('phone', value)}
+          placeholder="09XX XXX XXXX"
+          placeholderTextColor="#6f7f82"
+          autoComplete="tel"
+          keyboardType="phone-pad"
+          style={styles.input}
+        />
+      </View>
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Purpose</Text>
+        <CustomSelect
+          options={PURPOSE_OPTIONS}
+          value={form.purpose}
+          onChange={(value) => setField('purpose', value)}
+        />
+      </View>
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Password</Text>
+        <TextInput
+          value={form.password}
+          onChangeText={(value) => setField('password', value)}
+          placeholder="Create a password"
+          placeholderTextColor="#6f7f82"
+          secureTextEntry
+          autoComplete="new-password"
+          style={styles.input}
+        />
+      </View>
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.fieldLabel}>Confirm password</Text>
+        <TextInput
+          value={form.confirmPassword}
+          onChangeText={(value) => setField('confirmPassword', value)}
+          placeholder="Repeat your password"
+          placeholderTextColor="#6f7f82"
+          secureTextEntry
+          autoComplete="new-password"
+          style={styles.input}
+        />
+      </View>
 
       <Pressable disabled={!canSubmit || isLoading} onPress={submitRegistration} style={[styles.primaryButton, (!canSubmit || isLoading) && styles.disabledButton]}>
         <Text style={styles.primaryButtonText}>{isLoading ? 'Creating account...' : 'Create account'}</Text>
       </Pressable>
 
-      <Pressable onPress={() => onSuccess(false)} style={styles.inlineLinkWrap}>
-        <Text style={styles.inlineLinkText}>Already have an account? Login</Text>
-      </Pressable>
-
       {!!status.message && (
         <Text style={[styles.message, status.type === 'error' ? styles.error : styles.success]}>{status.message}</Text>
       )}
+
+      <Pressable onPress={() => onSuccess(false)} style={styles.inlineLinkWrap}>
+        <Text style={styles.inlineLinkText}>Already registered? <Text style={styles.inlineLinkBold}>Login here</Text></Text>
+      </Pressable>
     </View>
   )
 }
@@ -851,9 +947,95 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   inlineLinkText: {
+    color: '#667472',
+    fontWeight: '500',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  inlineLinkBold: {
     color: '#0f766e',
     fontWeight: '700',
-    fontSize: 14,
+  },
+  fieldGroup: {
+    gap: 6,
+  },
+  fieldLabel: {
+    color: '#0f3a37',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  customSelectTrigger: {
+    minHeight: 50,
+    borderWidth: 1,
+    borderColor: '#dce9e6',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#f7fbfa',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  customSelectValue: {
+    color: '#0f3a37',
+    fontSize: 15,
+    fontWeight: '500',
+    flex: 1,
+  },
+  customSelectChevron: {
+    color: '#0f766e',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  customSelectOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  customSelectSheet: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingTop: 16,
+    paddingBottom: 32,
+    paddingHorizontal: 16,
+    gap: 4,
+  },
+  customSelectSheetTitle: {
+    color: '#7a8a87',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  customSelectOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  customSelectOptionActive: {
+    backgroundColor: '#f0f9f7',
+  },
+  customSelectOptionText: {
+    color: '#0f3a37',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  customSelectOptionTextActive: {
+    color: '#0f766e',
+    fontWeight: '700',
+  },
+  customSelectCheck: {
+    color: '#0f766e',
+    fontSize: 15,
+    fontWeight: '800',
   },
   error: {
     color: '#dc2626',
