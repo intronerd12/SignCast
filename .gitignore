@@ -31,3 +31,13 @@ backend/.env
 
 # Local upload fallback files
 backend/public/uploads/
+
+# ML models and datasets
+*.pth
+*.task
+dataset/
+dataset_landmarks/
+landmark_dataset.json
+labels.json
+landmark_labels.json
+__pycache__/
