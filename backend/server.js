@@ -8,6 +8,7 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 const usersRouter = require('./routes/users');
 const recognitionRouter = require("./routes/recognition");
 const dataRouter = require('./routes/data');
+const uploadsRouter = require('./routes/uploads');
 const {
   getMissingSupabaseEnv,
   getMissingSupabasePublicEnv,
@@ -31,6 +32,7 @@ app.use('/public/uploads', express.static(__dirname + '/public/uploads'));
 app.use(`${API_PREFIX}/users`, usersRouter);
 app.use(`${API_PREFIX}/recognition`, recognitionRouter);
 app.use(`${API_PREFIX}/data`, dataRouter);
+app.use(`${API_PREFIX}/uploads`, uploadsRouter);
 
 app.get(API_PREFIX, (req, res) => {
   res.json({
