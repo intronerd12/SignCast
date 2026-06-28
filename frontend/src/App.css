@@ -865,8 +865,8 @@ main {
 
 .stat-card strong {
   color: var(--ink);
-  font-size: clamp(24px, 3vw, 30px);
-  line-height: 1;
+  font-size: clamp(18px, 2.2vw, 22px);
+  line-height: 1.15;
 }
 
 .settings-card {
