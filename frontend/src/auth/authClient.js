@@ -1,3 +1,6 @@
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
+import { auth, googleProvider } from './firebase'
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
 const SESSION_KEY = 'signcastAuth'
 
@@ -112,4 +115,54 @@ export const registerUser = async ({ name, email, phone, password }) => {
   }
 
   return response.json()
+}
+
+export const loginWithGoogle = async ({ accessType = 'user', rememberMe = true } = {}) => {
+  // Step 1 — Firebase popup sign-in with Google
+  const result = await signInWithPopup(auth, googleProvider)
+  const firebaseUser = result.user
+
+  // Get the Google access token from the credential
+  const credential = GoogleAuthProvider.credentialFromResult(result)
+  const googleAccessToken = credential?.accessToken
+
+  if (!googleAccessToken) {
+    throw new Error('Unable to retrieve Google access token. Please try again.')
+  }
+
+  // Step 2 — Send the token to the backend so it can find / create the Supabase user
+  const response = await fetch(`${API_BASE}/users/google`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accessToken: googleAccessToken }),
+  })
+
+  if (!response.ok) {
+    const message = await parseErrorMessage(response)
+    throw new Error(message || 'Google login failed on the server.')
+  }
+
+  const payload = await response.json()
+
+  if (accessType === 'admin' && !payload.isAdmin) {
+    throw new Error('This Google account is not assigned as an admin account.')
+  }
+
+  // Step 3 — Build and persist the local session
+  const session = {
+    token: payload.token || firebaseUser.accessToken || '',
+    userId: payload.id || firebaseUser.uid,
+    isAdmin: Boolean(payload.isAdmin),
+    isActive: payload.isActive !== false,
+    email: payload.email || firebaseUser.email,
+    name: payload.name || firebaseUser.displayName || '',
+    phone: payload.phone || '',
+    image: payload.image || firebaseUser.photoURL || '',
+    createdAt: payload.createdAt || '',
+    accessType,
+    provider: 'google',
+  }
+
+  saveSession(session, rememberMe)
+  return session
 }

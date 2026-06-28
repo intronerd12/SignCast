@@ -879,17 +879,17 @@ function MarketingPage() {
           </p>
           <div className="achievement-grid">
             <div className="achievement-card">
-              <div className="achievement-icon">ðŸŽ“</div>
+              <div className="achievement-icon"><svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#0f766e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></div>
               <p className="achievement-eyebrow">For learners</p>
               <p>Practice and master FSL signs with instant feedback from our recognition engine.</p>
             </div>
             <div className="achievement-card">
-              <div className="achievement-icon">ðŸ—£ï¸</div>
+              <div className="achievement-icon"><svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#0f766e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h6"/></svg></div>
               <p className="achievement-eyebrow">For interpreters</p>
               <p>Speed up your workflow with AI-assisted transcription and phrase management.</p>
             </div>
             <div className="achievement-card">
-              <div className="achievement-icon">ðŸ“š</div>
+              <div className="achievement-icon"><svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#0f766e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8M8 11h6"/></svg></div>
               <p className="achievement-eyebrow">For educators</p>
               <p>Teach FSL more effectively using mobile or web tools that track student progress.</p>
             </div>
@@ -959,19 +959,19 @@ function MarketingPage() {
 
       <div className="marketing-grid">
         <article>
-          <div className="grid-icon">ðŸ‘ï¸</div>
+          <div className="grid-icon"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#0f766e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/></svg></div>
           <span>Features</span>
           <h3>Recognition workspace</h3>
           <p>Live camera input, phrase confidence, sentence transcript, and speech output in one interface.</p>
         </article>
         <article>
-          <div className="grid-icon">âš¡</div>
+          <div className="grid-icon"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#d97706" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
           <span>Getting started</span>
           <h3>Sign up in seconds</h3>
           <p>Create a learner account to access the mobile app, or request admin status if you are an educator or organization.</p>
         </article>
         <article>
-          <div className="grid-icon">ðŸ¤</div>
+          <div className="grid-icon"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#0f766e" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
           <span>Support and community</span>
           <h3>Learn from the community</h3>
           <p>Join our learner community, access FSL guides, and get help from interpreters and educators building with SignCast.</p>
