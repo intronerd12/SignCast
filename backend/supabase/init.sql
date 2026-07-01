@@ -194,8 +194,21 @@ notify pgrst, 'reload schema';
 
 
 -- ============================================================
--- 6. Storage bucket (optional — run once, or use the Dashboard)
+-- 6. Storage buckets
 -- ============================================================
--- insert into storage.buckets (id, name, public)
--- values ('fsl-videos', 'fsl-videos', false)
--- on conflict do nothing;
+
+-- 6a. FSL video clips (private)
+insert into storage.buckets (id, name, public)
+values ('fsl-videos', 'fsl-videos', false)
+on conflict do nothing;
+
+-- 6b. ML model files served to the frontend (public read)
+insert into storage.buckets (id, name, public)
+values ('signcast-models', 'signcast-models', true)
+on conflict do nothing;
+
+-- Allow anyone to read model files (they are not sensitive)
+drop policy if exists "Public read model files" on storage.objects;
+create policy "Public read model files"
+  on storage.objects for select
+  using (bucket_id = 'signcast-models');
