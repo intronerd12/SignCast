@@ -37,11 +37,6 @@ _update_css*.js
 backend/public/uploads/
 
 # ML models and datasets
-*.pth
-*.task
-dataset/
-dataset_landmarks/
-landmark_dataset.json
-labels.json
-landmark_labels.json
+ml/models/
+ml/data/
 __pycache__/

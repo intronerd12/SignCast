@@ -426,4 +426,33 @@ router.get("/library", async (req, res) => {
   }
 });
 
+router.get("/model-urls", async (req, res) => {
+  const modelFiles = ["landmark_model.onnx", "landmark_labels.json", "hand_landmarker.task"];
+  const bucketName = "signcast-models";
+
+  try {
+    const supabase = createSupabaseAdminClient();
+
+    const urls = {};
+    for (const fileName of modelFiles) {
+      const { data } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+      const key = fileName.replace(/[.-]/g, "_").replace(/_\w+$/, "");
+      urls[fileName] = data?.publicUrl || null;
+    }
+
+    return res.json({
+      success: true,
+      bucket: bucketName,
+      files: urls,
+    });
+  } catch (error) {
+    // Supabase Storage not configured — frontend will use local fallback
+    return res.json({
+      success: false,
+      message: error.message || "Storage not available",
+      files: {},
+    });
+  }
+});
+
 module.exports = router;
