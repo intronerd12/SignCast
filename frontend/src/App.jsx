@@ -3,7 +3,7 @@ import './App.css'
 import LoginPage from './pages/login.js'
 import RegisterPage from './pages/register.js'
 import { clearSession, getSavedSession, updateSavedSession } from './auth/authClient.js'
-import { getRoute } from './helpers.js'
+import { getRoute, getStoredThemePreference, resolveTheme, saveThemePreference } from './helpers.js'
 
 import Header from './components/Header.jsx'
 import AdminPage from './pages/AdminPage.jsx'
@@ -17,16 +17,42 @@ import MarketingPage from './pages/MarketingPage.jsx'
 function App() {
   const [route, setRoute] = useState(getRoute)
   const [session, setSession] = useState(getSavedSession)
+  const [themePreference, setThemePreference] = useState(() => getStoredThemePreference(getSavedSession()))
 
   useEffect(() => {
     const updateRoute = () => {
+      const nextSession = getSavedSession()
       setRoute(getRoute())
-      setSession(getSavedSession())
+      setSession(nextSession)
+      setThemePreference(getStoredThemePreference(nextSession))
     }
 
     window.addEventListener('hashchange', updateRoute)
     return () => window.removeEventListener('hashchange', updateRoute)
   }, [])
+
+  useEffect(() => {
+    const applyTheme = () => {
+      document.documentElement.dataset.theme = resolveTheme(themePreference)
+    }
+
+    applyTheme()
+
+    if (themePreference !== 'system') {
+      return undefined
+    }
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleChange = () => applyTheme()
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange)
+      return () => mediaQuery.removeEventListener('change', handleChange)
+    }
+
+    mediaQuery.addListener(handleChange)
+    return () => mediaQuery.removeListener(handleChange)
+  }, [themePreference])
 
   const isAuthenticated = Boolean(session?.token)
   const isAdminRoute = route === 'admin'
@@ -51,6 +77,7 @@ function App() {
 
   const handleLoggedIn = (newSession) => {
     setSession(newSession)
+    setThemePreference(getStoredThemePreference(newSession))
     window.location.hash = newSession?.isAdmin ? '#/admin' : '#/app'
   }
 
@@ -67,8 +94,14 @@ function App() {
   const handleLogout = () => {
     clearSession()
     setSession(null)
+    setThemePreference(getStoredThemePreference(null))
     window.location.hash = '#/'
   }
+
+  const handleThemePreferenceChange = useCallback((nextPreference) => {
+    const normalized = saveThemePreference(session, nextPreference)
+    setThemePreference(normalized)
+  }, [session])
 
   const page = route === 'login'
     ? <LoginPage onLoggedIn={handleLoggedIn} />
@@ -77,7 +110,14 @@ function App() {
       : route === 'admin'
         ? <AdminPage session={session} onLogout={handleLogout} />
         : route === 'profile'
-          ? <ProfilePage session={session} onSessionUpdated={handleSessionUpdated} />
+          ? (
+            <ProfilePage
+              session={session}
+              onSessionUpdated={handleSessionUpdated}
+              themePreference={themePreference}
+              onThemePreferenceChange={handleThemePreferenceChange}
+            />
+          )
         : route === 'library'
           ? <LibraryPage session={session} />
           : route === 'trainer'
