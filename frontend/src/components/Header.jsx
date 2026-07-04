@@ -24,6 +24,7 @@ export default function Header({ route, isAuthenticated, session, onLogout }) {
             ) : (
               <>
                 <a className={route === 'app' ? 'active' : ''} href="#/app">Dashboard</a>
+                <a className={route === 'learn' ? 'active learn-nav' : 'learn-nav'} href="#/learn">Learn</a>
                 <a className={route === 'recognizer' ? 'active' : ''} href="#/recognizer">Translate</a>
                 <a className={route === 'trainer' ? 'active' : ''} href="#/trainer">Trainer</a>
                 <a className={route === 'library' ? 'active' : ''} href="#/library">Library</a>

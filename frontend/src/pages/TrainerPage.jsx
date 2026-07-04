@@ -3,6 +3,7 @@ import { API_BASE } from '../helpers.js'
 
 export default function TrainerPage({ session }) {
   const videoRef = useRef(null)
+  const canvasRef = useRef(null)
   const streamRef = useRef(null)
   const [cameraState, setCameraState] = useState('off')
   const [isSaving, setIsSaving] = useState(false)
@@ -13,6 +14,7 @@ export default function TrainerPage({ session }) {
     label: '',
     category: 'word',
     notes: '',
+    captureImage: true,
   })
 
   const stopCamera = () => {
@@ -122,6 +124,28 @@ export default function TrainerPage({ session }) {
     setStatus('Saving camera sample...')
 
     try {
+      if (form.captureImage && videoRef.current && canvasRef.current) {
+        const video = videoRef.current
+        const canvas = canvasRef.current
+        if (video.readyState >= 2) {
+          const ctx = canvas.getContext('2d')
+          canvas.width = video.videoWidth
+          canvas.height = video.videoHeight
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+          
+          const dataUrl = canvas.toDataURL('image/jpeg', 1.0)
+          
+          // Trigger browser download
+          const link = document.createElement('a')
+          link.href = dataUrl
+          const safeLabel = label.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+          link.download = `fsl_${safeLabel}_${Date.now()}.jpg`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+        }
+      }
+
       const response = await fetch(`${API_BASE}/recognition/teach`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,6 +172,7 @@ export default function TrainerPage({ session }) {
       <div className="phone-stage" aria-label="FSL training camera">
         <div className="camera-panel">
           <video ref={videoRef} className="camera-feed" autoPlay muted playsInline />
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
           {cameraState !== 'active' && (
             <div className="camera-placeholder">
               <span className="scan-frame" />
@@ -206,6 +231,16 @@ export default function TrainerPage({ session }) {
               rows={3}
               placeholder="Hand shape, direction, speed, and any teaching hints"
             />
+          </label>
+
+          <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={form.captureImage}
+              onChange={(event) => setForm((current) => ({ ...current, captureImage: event.target.checked }))}
+              style={{ width: 'auto' }}
+            />
+            <span style={{ margin: 0 }}>Save raw image (for Roboflow)</span>
           </label>
         </form>
 

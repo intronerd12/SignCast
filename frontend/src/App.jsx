@@ -12,6 +12,7 @@ import LibraryPage from './pages/LibraryPage.jsx'
 import TrainerPage from './pages/TrainerPage.jsx'
 import RecognitionWorkspace from './pages/RecognitionWorkspace.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
+import LearnPage from './pages/LearnPage.jsx'
 import MarketingPage from './pages/MarketingPage.jsx'
 
 function App() {
@@ -30,7 +31,7 @@ function App() {
 
   const isAuthenticated = Boolean(session?.token)
   const isAdminRoute = route === 'admin'
-  const isUserWorkspaceRoute = route === 'app' || route === 'recognizer' || route === 'library' || route === 'trainer'
+  const isUserWorkspaceRoute = route === 'app' || route === 'recognizer' || route === 'library' || route === 'trainer' || route === 'learn'
   const isProtectedRoute = isUserWorkspaceRoute || route === 'profile' || isAdminRoute
 
   useEffect(() => {
@@ -84,6 +85,8 @@ function App() {
             ? <TrainerPage session={session} />
           : route === 'recognizer'
             ? <RecognitionWorkspace session={session} />
+          : route === 'learn'
+            ? <LearnPage session={session} />
           : route === 'app'
             ? <DashboardPage session={session} />
             : <MarketingPage />
