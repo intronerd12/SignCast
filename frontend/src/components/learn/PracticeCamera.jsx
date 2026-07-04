@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react'
 import * as signRecognizer from '../../signRecognizer.js'
 
-const PracticeCamera = forwardRef(({ targetLabel, onMatch, disabled }, ref) => {
+const PracticeCamera = forwardRef(({ targetLabel, onMatch, disabled, manualMode = false }, ref) => {
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
@@ -27,7 +27,8 @@ const PracticeCamera = forwardRef(({ targetLabel, onMatch, disabled }, ref) => {
         dataUrl,
         landmarks: latestLandmarksRef.current
       };
-    }
+    },
+    getCurrentPrediction: () => detected
   }));
 
   useEffect(() => {
@@ -62,7 +63,7 @@ const PracticeCamera = forwardRef(({ targetLabel, onMatch, disabled }, ref) => {
       
       setDetected({ label, confidence, source })
       
-      if (label.toLowerCase() === targetLabel.toLowerCase() && confidence >= 40) {
+      if (!manualMode && label.toLowerCase() === targetLabel.toLowerCase() && confidence >= 40) {
         running = false
         setStatus('Great job!')
         onMatch()
@@ -102,7 +103,7 @@ const PracticeCamera = forwardRef(({ targetLabel, onMatch, disabled }, ref) => {
         streamRef.current.getTracks().forEach((t) => t.stop())
       }
     }
-  }, [targetLabel, onMatch, disabled])
+  }, [targetLabel, onMatch, disabled, manualMode])
 
   return (
     <div className={`practice-camera-container ${disabled ? 'disabled' : ''}`}>

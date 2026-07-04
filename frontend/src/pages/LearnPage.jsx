@@ -1,165 +1,145 @@
-import { useState, useRef, useMemo } from 'react'
-import { SIGNS } from '../data/fslLessons.js'
-import PracticeCamera from '../components/learn/PracticeCamera.jsx'
-import SignCard from '../components/learn/SignCard.jsx'
+import { useState, useEffect } from 'react'
+import { UNITS, SIGNS } from '../data/fslLessons.js'
+import SignTestRunner from '../components/learn/SignTestRunner.jsx'
+import './LearnPagePremium.css'
 
-const API_BASE = '/api/v1'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'
 
-export default function LearnPage() {
-  const [selectedSignId, setSelectedSignId] = useState(SIGNS[0].id)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
-  const [statusMessage, setStatusMessage] = useState('')
-  const cameraRef = useRef(null)
+export default function LearnPage({ session }) {
+  const [activeUnit, setActiveUnit] = useState(null)
+  const [testSigns, setTestSigns] = useState([])
+  const [highScore, setHighScore] = useState(0)
+  const [recentScores, setRecentScores] = useState([])
 
-  const selectedSign = useMemo(() => SIGNS.find((s) => s.id === selectedSignId), [selectedSignId])
+  // Only get the Alphabet unit (Test 1)
+  const alphabetUnit = UNITS.find(u => u.id === 'alphabet')
+  const testableUnit = alphabetUnit ? {
+    ...alphabetUnit,
+    testableSigns: alphabetUnit.signs
+      .map(id => SIGNS.find(s => s.id === id))
+      .filter(s => s && s.modelLabel)
+  } : null
 
-  const filteredSigns = useMemo(() => {
-    if (!searchQuery) return SIGNS
-    const query = searchQuery.toLowerCase()
-    return SIGNS.filter(
-      (s) =>
-        s.word.toLowerCase().includes(query) ||
-        s.english.toLowerCase().includes(query) ||
-        s.category.toLowerCase().includes(query)
-    )
-  }, [searchQuery])
-
-  // Group by category
-  const signsByCategory = useMemo(() => {
-    const groups = {}
-    for (const sign of filteredSigns) {
-      if (!groups[sign.category]) groups[sign.category] = []
-      groups[sign.category].push(sign)
+  useEffect(() => {
+    if (session?.userId) {
+      fetch(`${API_BASE}/scores/${session.userId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.highest_score) setHighScore(data.highest_score)
+          if (data.scores) setRecentScores(data.scores)
+        })
+        .catch(console.error)
     }
-    return groups
-  }, [filteredSigns])
+  }, [session?.userId])
 
-  const handleCaptureTrain = async () => {
-    if (!cameraRef.current) return
-    const snapshot = cameraRef.current.captureSample()
-    if (!snapshot) {
-      setStatusMessage('Camera not ready. Please wait.')
-      return
-    }
+  const handleStartTest = () => {
+    if (!testableUnit) return
+    const shuffled = [...testableUnit.testableSigns].sort(() => Math.random() - 0.5)
+    setTestSigns(shuffled)
+    setActiveUnit(testableUnit)
+  }
 
-    setIsSaving(true)
-    setStatusMessage('Saving training sample...')
+  const handleTestComplete = async (finalScore) => {
+    setActiveUnit(null)
+    setTestSigns([])
 
-    try {
-      // 1. Download image for Roboflow
-      const link = document.createElement('a')
-      link.href = snapshot.dataUrl
-      const safeLabel = selectedSign.modelLabel || selectedSign.word.toLowerCase().replace(/[^a-z0-9]/g, '_')
-      link.download = `fsl_${safeLabel}_${Date.now()}.jpg`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-
-      // 2. Upload landmarks to Supabase
-      const payload = {
-        label: selectedSign.modelLabel || selectedSign.word,
-        category: selectedSign.category,
-        source: 'integrated_studio',
-        landmarks: snapshot.landmarks,
-        notes: `Captured from Dynamic Learning Studio for ${selectedSign.english}`,
+    if (session?.userId && finalScore > 0) {
+      try {
+        await fetch(`${API_BASE}/scores`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: session.userId,
+            score: finalScore,
+            test_type: testableUnit.id
+          })
+        })
+        if (finalScore > highScore) {
+          setHighScore(finalScore)
+        }
+        // Optimistically add to recent scores
+        setRecentScores(prev => [
+          { score: finalScore, created_at: new Date().toISOString() },
+          ...prev
+        ])
+      } catch (err) {
+        console.error("Failed to save score", err)
       }
-
-      const response = await fetch(`${API_BASE}/recognition/teach`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const data = await response.json()
-
-      if (!response.ok || !data?.success) {
-        throw new Error(data?.message || 'Failed to save landmarks')
-      }
-
-      setStatusMessage('Success! Image downloaded & landmarks saved.')
-      setTimeout(() => setStatusMessage(''), 4000)
-    } catch (err) {
-      setStatusMessage(`Error: ${err.message}`)
-    } finally {
-      setIsSaving(false)
     }
   }
 
-  return (
-    <section className="learning-studio-container">
-      {/* LEFT PANEL: Library */}
-      <aside className="educational-panel">
-        <div className="edu-header">
-          <h2>Sign Library</h2>
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Search signs (e.g. hello, family)..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+  const handleCloseTest = () => {
+    setActiveUnit(null)
+    setTestSigns([])
+  }
 
-        <div className="edu-scrollable">
-          {Object.entries(signsByCategory).map(([category, signs]) => (
-            <div key={category} className="edu-category">
-              <h3 className="category-title">{category.toUpperCase()}</h3>
-              <div className="edu-grid">
-                {signs.map((sign) => (
-                  <button
-                    key={sign.id}
-                    className={`edu-sign-btn ${selectedSignId === sign.id ? 'active' : ''}`}
-                    onClick={() => setSelectedSignId(sign.id)}
-                  >
-                    <span className="edu-sign-emoji">{sign.emoji}</span>
-                    <span className="edu-sign-word">{sign.word}</span>
-                  </button>
-                ))}
+  return (
+    <div className="premium-learn-container">
+      <div className="premium-header">
+        <h1>FSL Certification Test</h1>
+        <p>Prove your mastery of the Filipino Sign Language.</p>
+      </div>
+
+      {testableUnit && (
+        <div className="premium-test-card">
+          <div className="card-bg-gradient"></div>
+          <div className="card-content">
+            <div className="card-icon-wrapper">
+              <span className="card-icon">{testableUnit.icon}</span>
+            </div>
+            
+            <div className="card-text">
+              <h2>{testableUnit.title}</h2>
+              <p>Test your physical signing skills! You will be asked to pose {testableUnit.testableSigns.length} different signs into your camera. You have 3 strikes.</p>
+              
+              <div className="card-badges">
+                <span className="badge camera">📸 Camera Required</span>
+                <span className="badge strikes">❤️ 3 Strikes</span>
+                <span className="badge score">🏆 High Score: {highScore}</span>
               </div>
             </div>
-          ))}
-          {filteredSigns.length === 0 && <p className="no-results">No signs found.</p>}
-        </div>
-      </aside>
 
-      {/* RIGHT PANEL: Integrated Practice & Train */}
-      <main className="integrated-camera-panel">
-        <div className="active-sign-header">
-          <div className="active-sign-badge">{selectedSign.emoji}</div>
-          <div className="active-sign-info">
-            <h1>{selectedSign.word}</h1>
-            <p className="translation">{selectedSign.english}</p>
+            <button className="premium-start-btn" onClick={handleStartTest}>
+              <span className="btn-text">Begin Test</span>
+              <span className="btn-arrow">→</span>
+            </button>
           </div>
         </div>
-        
-        <div className="active-sign-instructions">
-          <h3>How to sign this:</h3>
-          <p>{selectedSign.description}</p>
-        </div>
+      )}
 
-        <div className="studio-camera-wrapper">
-          <PracticeCamera
-            ref={cameraRef}
-            targetLabel={selectedSign.modelLabel || selectedSign.word}
-            onMatch={() => setStatusMessage('🎉 Correctly Recognized! Great job!')}
-          />
-        </div>
-
-        <div className="studio-action-bar">
-          <div className="action-info">
-            <h4>Is the AI struggling to recognize you?</h4>
-            <p>You can help improve the system by submitting this frame as training data.</p>
+      {/* RECENT SCORES SECTION */}
+      {recentScores.length > 0 && (
+        <div className="recent-scores-container">
+          <h3>Your Recent Tests</h3>
+          <div className="recent-scores-list">
+            {recentScores.slice(0, 5).map((score, index) => {
+              const date = new Date(score.created_at)
+              return (
+                <div key={index} className="recent-score-card">
+                  <div className="score-info">
+                    <span className="score-date">{date.toLocaleDateString()} at {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="score-type">Alphabet Test</span>
+                  </div>
+                  <div className="score-value">
+                    <strong>{score.score}</strong> pts
+                  </div>
+                </div>
+              )
+            })}
           </div>
-          <button
-            className="studio-train-btn"
-            onClick={handleCaptureTrain}
-            disabled={isSaving}
-          >
-            {isSaving ? 'Capturing...' : '📸 Capture & Train AI'}
-          </button>
         </div>
-        {statusMessage && <p className="studio-status-msg">{statusMessage}</p>}
-      </main>
-    </section>
+      )}
+
+      {/* FULLSCREEN TEST RUNNER */}
+      {activeUnit && testSigns.length > 0 && (
+        <SignTestRunner
+          signs={testSigns}
+          title={activeUnit.title}
+          color={activeUnit.color}
+          onClose={handleCloseTest}
+          onComplete={handleTestComplete}
+        />
+      )}
+    </div>
   )
 }

@@ -71,6 +71,14 @@ create table if not exists public.fsl_sign_samples (
   updated_at     timestamptz not null default now()
 );
 
+-- 1d. fsl_scores ----------------------------------------------
+create table if not exists public.fsl_scores (
+  id             uuid        primary key default gen_random_uuid(),
+  user_id        uuid        references auth.users(id) on delete cascade,
+  score          integer     not null,
+  test_type      text        not null,
+  created_at     timestamptz not null default now()
+);
 
 -- ============================================================
 -- 2. Indexes
@@ -183,6 +191,20 @@ create policy "Users delete own unverified samples"
   on public.fsl_sign_samples for delete
   to authenticated
   using (recorded_by = auth.uid() and is_verified = false);
+
+-- fsl_scores --------------------------------------------------
+drop policy if exists "Users read own scores"               on public.fsl_scores;
+create policy "Users read own scores"
+  on public.fsl_scores for select
+  to authenticated
+  using (user_id = auth.uid());
+
+drop policy if exists "Users insert own scores"             on public.fsl_scores;
+create policy "Users insert own scores"
+  on public.fsl_scores for insert
+  to authenticated
+  with check (user_id = auth.uid());
+
 
 
 -- ============================================================

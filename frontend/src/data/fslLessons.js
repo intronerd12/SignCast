@@ -27,18 +27,18 @@ export const SIGNS = [
   { id: 'letter_e', word: 'E', english: 'Letter E', description: 'All fingertips curl down to touch the thumb, making a compact fist-like shape.', emoji: '📧', category: 'alphabet', modelLabel: 'e' },
   { id: 'letter_j', word: 'J', english: 'Letter J (Dynamic)', description: 'Draw a J in the air with the pinky finger.', emoji: '🇯', category: 'alphabet', modelLabel: 'j' },
   { id: 'letter_z', word: 'Z', english: 'Letter Z (Dynamic)', description: 'Draw a Z in the air with the index finger.', emoji: '🇿', category: 'alphabet', modelLabel: 'z' },
-  { id: 'letter_enye', word: 'Ñ', english: 'Letter Ñ (Dynamic)', description: 'Draw a wavy line (tilde) in the air.', emoji: 'Ñ', category: 'alphabet', modelLabel: 'enye' },
+  { id: 'letter_enye', word: 'Ñ', english: 'Letter Ñ (Dynamic)', description: 'Draw a wavy line (tilde) in the air.', emoji: 'Ñ', category: 'alphabet' },
 
   // Common Words
-  { id: 'tubig',   word: 'Tubig',   english: 'Water',  description: 'W-shaped hand (three fingers extended) taps the chin twice.', emoji: '💧', category: 'common' },
+  { id: 'tubig',   word: 'Tubig',   english: 'Water',  description: 'W-shaped hand (three fingers extended) taps the chin twice.', emoji: '💧', category: 'common', modelLabel: 'water' },
   { id: 'pagkain', word: 'Pagkain', english: 'Food',   description: 'Bunched fingertips tap the lips repeatedly, like eating.', emoji: '🍽️', category: 'common' },
   { id: 'bahay',   word: 'Bahay',   english: 'House',  description: 'Both hands form a triangle roof shape above the head, fingertips touching.', emoji: '🏠', category: 'common' },
   { id: 'paaralan',word: 'Paaralan',english: 'School', description: 'One flat hand claps on the other twice, like a teacher clapping for attention.', emoji: '🏫', category: 'common' },
   { id: 'araw',    word: 'Araw',    english: 'Day / Sun', description: 'Index finger draws a circle in the air, then hand opens and rises upward.', emoji: '☀️', category: 'common' },
 
   // Family
-  { id: 'nanay',  word: 'Nanay',  english: 'Mother', description: 'Open hand with thumb touching the chin, fingers spread, palm facing left.', emoji: '👩', category: 'family' },
-  { id: 'tatay',  word: 'Tatay',  english: 'Father', description: 'Open hand with thumb touching the forehead, fingers spread, palm facing left.', emoji: '👨', category: 'family' },
+  { id: 'nanay',  word: 'Nanay',  english: 'Mother', description: 'Open hand with thumb touching the chin, fingers spread, palm facing left.', emoji: '👩', category: 'family', modelLabel: 'mother' },
+  { id: 'tatay',  word: 'Tatay',  english: 'Father', description: 'Open hand with thumb touching the forehead, fingers spread, palm facing left.', emoji: '👨', category: 'family', modelLabel: 'father' },
   { id: 'kapatid',word: 'Kapatid',english: 'Sibling',description: 'Both index fingers side by side, pointing forward, then separate sideways.', emoji: '👫', category: 'family' },
   { id: 'pamilya',word: 'Pamilya',english: 'Family', description: 'Both hands form F handshapes, circle forward and link together at the end.', emoji: '👪', category: 'family' },
   { id: 'anak',   word: 'Anak',   english: 'Child',  description: 'Flat hand lowers palm-down from chest level, indicating small height.', emoji: '🧒', category: 'family' },
@@ -47,7 +47,7 @@ export const SIGNS = [
   { id: 'masaya',   word: 'Masaya',   english: 'Happy',   description: 'Both open palms brush upward on the chest repeatedly, face smiling.', emoji: '😊', category: 'feelings' },
   { id: 'malungkot',word: 'Malungkot',english: 'Sad',     description: 'Both open hands slide downward on the face, fingers spread, sad expression.', emoji: '😢', category: 'feelings' },
   { id: 'galit',    word: 'Galit',    english: 'Angry',   description: 'Claw-shaped hand pulls away from the face sharply, showing frustration.', emoji: '😠', category: 'feelings' },
-  { id: 'mahal',    word: 'Mahal',    english: 'Love',    description: 'Both arms cross over the chest in a hugging motion, fists closed.', emoji: '❤️', category: 'feelings' },
+  { id: 'mahal',    word: 'Mahal',    english: 'Love',    description: 'Both arms cross over the chest in a hugging motion, fists closed.', emoji: '❤️', category: 'feelings', modelLabel: 'i love you' },
   { id: 'takot',    word: 'Takot',    english: 'Scared',  description: 'Both flat palms face the body and shake/tremble rapidly, fearful expression.', emoji: '😨', category: 'feelings' },
 
   // Questions

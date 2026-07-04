@@ -9,6 +9,7 @@ const usersRouter = require('./routes/users');
 const recognitionRouter = require("./routes/recognition");
 const dataRouter = require('./routes/data');
 const uploadsRouter = require('./routes/uploads');
+const scoresRouter = require('./routes/scores');
 const {
   getMissingSupabaseEnv,
   getMissingSupabasePublicEnv,
@@ -33,6 +34,7 @@ app.use(`${API_PREFIX}/users`, usersRouter);
 app.use(`${API_PREFIX}/recognition`, recognitionRouter);
 app.use(`${API_PREFIX}/data`, dataRouter);
 app.use(`${API_PREFIX}/uploads`, uploadsRouter);
+app.use(`${API_PREFIX}/scores`, scoresRouter);
 
 app.get(API_PREFIX, (req, res) => {
   res.json({
