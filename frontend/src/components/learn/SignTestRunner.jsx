@@ -6,6 +6,7 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
   const [strikes, setStrikes] = useState(0)
   const [status, setStatus] = useState('idle') // idle | correct | incorrect | gameover | finished
   const [feedback, setFeedback] = useState('')
+  const [correctCount, setCorrectCount] = useState(0)
   const cameraRef = useRef(null)
 
   const currentSign = signs[currentIndex]
@@ -14,7 +15,7 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
   const MAX_STRIKES = 3
 
   const handleSubmitPose = () => {
-    if (!cameraRef.current) return
+    if (!cameraRef.current || status !== 'idle') return
     const prediction = cameraRef.current.getCurrentPrediction()
     
     if (!prediction || !prediction.label) {
@@ -34,7 +35,8 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
 
   const handleCorrect = () => {
     setStatus('correct')
-    setFeedback('✅ Correct! Good job.')
+    setCorrectCount(c => c + 1)
+    setFeedback('✅ Correct! Great job!')
     setTimeout(() => {
       if (currentIndex + 1 >= totalSigns) {
         setStatus('finished')
@@ -51,7 +53,7 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
     const newStrikes = strikes + 1
     setStrikes(newStrikes)
     setStatus('incorrect')
-    setFeedback(`❌ Incorrect. I saw "${predictedLabel.toUpperCase()}". Try again.`)
+    setFeedback(`❌ I saw "${predictedLabel.toUpperCase()}" — that's not quite right.`)
     
     if (newStrikes >= MAX_STRIKES) {
       setTimeout(() => {
@@ -73,7 +75,17 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
           <div className="exercise-gameover">
             <span className="gameover-icon">💔</span>
             <h2>Test Failed</h2>
-            <p>You received 3 strikes. Practice more and try again!</p>
+            <p>You received 3 strikes. Keep practicing and come back stronger!</p>
+            <div className="gameover-stats">
+              <div className="gameover-stat">
+                <strong>{correctCount}</strong>
+                <span>Correct</span>
+              </div>
+              <div className="gameover-stat">
+                <strong>{totalSigns - correctCount}</strong>
+                <span>Remaining</span>
+              </div>
+            </div>
             <button className="exercise-btn primary" onClick={onClose}>Back to Menu</button>
           </div>
         </div>
@@ -84,13 +96,14 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
   // --- Finished Screen ---
   if (status === 'finished') {
     const isPerfect = strikes === 0
+    const accuracy = Math.round((correctCount / totalSigns) * 100)
     return (
       <div className="exercise-overlay">
         <div className="exercise-container celebration">
           <div className="confetti-burst" />
           <div className="celebration-content">
             <span className="celebration-icon">{isPerfect ? '🎉' : '⭐'}</span>
-            <h2>Test Complete!</h2>
+            <h2>{isPerfect ? 'Perfect Score!' : 'Test Complete!'}</h2>
             <p className="celebration-unit">{title}</p>
 
             <div className="celebration-stats">
@@ -99,10 +112,16 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
                 <span>Signs Tested</span>
               </div>
               <div className="celebration-stat">
+                <strong>{accuracy}%</strong>
+                <span>Accuracy</span>
+              </div>
+              <div className="celebration-stat">
                 <strong>{MAX_STRIKES - strikes}</strong>
-                <span>Hearts Remaining</span>
+                <span>Hearts Left</span>
               </div>
             </div>
+
+            {isPerfect && <p className="perfect-badge">🏅 Flawless performance!</p>}
 
             <button className="exercise-btn primary" onClick={onClose}>Continue</button>
           </div>
@@ -117,7 +136,7 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
       <div className="exercise-container">
         {/* Topbar */}
         <div className="exercise-topbar">
-          <button className="exercise-close" onClick={onClose}>✕</button>
+          <button className="exercise-close" onClick={onClose} aria-label="Close test">✕</button>
           <div className="exercise-progress-bar">
             <div className="exercise-progress-fill" style={{ width: `${progress}%`, background: color }} />
           </div>
@@ -133,12 +152,18 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
         {/* Question Area */}
         <div className="exercise-body">
           <div className="exercise-question">
-            <span className="exercise-type-badge">Action Required</span>
-            <h3 className="exercise-word" style={{ marginTop: '10px' }}>
-              What is the FSL sign for <strong style={{ color }}>{currentSign.word}</strong>?
+            <span className="exercise-type-badge">Sign Recognition</span>
+
+            {/* Sign counter */}
+            <p className="spell-word-counter">
+              Sign {currentIndex + 1} of {totalSigns}
+            </p>
+
+            <h3 className="exercise-word" style={{ marginTop: '8px' }}>
+              Show the FSL sign for <strong style={{ color }}>{currentSign.word}</strong>
             </h3>
             
-            <div className="studio-camera-wrapper" style={{ marginTop: '20px', minHeight: '340px' }}>
+            <div className="studio-camera-wrapper" style={{ marginTop: '16px', minHeight: '300px' }}>
               <PracticeCamera
                 ref={cameraRef}
                 targetLabel={currentSign.modelLabel}
@@ -148,21 +173,16 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
             </div>
             
             {feedback && (
-              <p className={`test-feedback ${status}`} style={{
-                textAlign: 'center', 
-                fontWeight: 'bold', 
-                marginTop: '16px',
-                color: status === 'correct' ? '#58cc02' : '#ff4b4b'
-              }}>
-                {feedback}
-              </p>
+              <div className={`test-feedback-banner ${status}`}>
+                <span className="test-feedback-text">{feedback}</span>
+              </div>
             )}
 
             <button 
               className="exercise-btn primary submit-pose-btn" 
               onClick={handleSubmitPose}
               disabled={status === 'correct' || status === 'incorrect'}
-              style={{ marginTop: '20px', width: '100%', fontSize: '18px' }}
+              style={{ marginTop: '16px', width: '100%', fontSize: '18px' }}
             >
               📸 Submit Pose
             </button>

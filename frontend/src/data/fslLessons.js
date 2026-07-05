@@ -62,6 +62,20 @@ export const SIGNS = [
 
 export const getSignById = (id) => SIGNS.find((s) => s.id === id)
 
+// ── Word Spelling Bank (Test 2) ────────────────────────────────────────────
+// Words built only from model-supported letters: A, B, C, D, E, J, Z
+
+export const WORD_SPELL_BANK = [
+  { word: 'ACE',  letters: ['a', 'c', 'e'] },
+  { word: 'BAD',  letters: ['b', 'a', 'd'] },
+  { word: 'CAB',  letters: ['c', 'a', 'b'] },
+  { word: 'DAD',  letters: ['d', 'a', 'd'] },
+  { word: 'BED',  letters: ['b', 'e', 'd'] },
+  { word: 'ADD',  letters: ['a', 'd', 'd'] },
+  { word: 'ABE',  letters: ['a', 'b', 'e'] },
+  { word: 'DAB',  letters: ['d', 'a', 'b'] },
+]
+
 const pickRandom = (arr, count, exclude = []) => {
   const pool = arr.filter((item) => !exclude.includes(item))
   const shuffled = [...pool].sort(() => Math.random() - 0.5)
