@@ -1,8 +1,14 @@
 import { useRef, useState, useEffect, useMemo } from 'react'
 import * as signRecognizer from '../signRecognizer.js'
 
+const ROBOFLOW_API_URL = "https://detect.roboflow.com"
+const ROBOFLOW_API_KEY = "vSmtDSumhDVW5oZg72Ef"
+const DATASET_ID       = "filipino-sign-language-dataset-h0guf"
+const DATASET_VERSION  = "1"
+
 export default function RecognitionWorkspace({ session }) {
   const videoRef = useRef(null)
+  const canvasRef = useRef(null)
   const streamRef = useRef(null)
   const animFrameRef = useRef(null)
   const [cameraState, setCameraState] = useState('off')
@@ -15,7 +21,7 @@ export default function RecognitionWorkspace({ session }) {
   const stableCountRef = useRef(0)
   const lastLabelRef = useRef(null)
   const CONFIDENCE_THRESHOLD = 70
-  const STABLE_FRAMES = 8 // Number of consistent frames before confirming
+  const STABLE_FRAMES = 5 // Reduced slightly for roboflow responsiveness
 
   const sentence = useMemo(() => transcript.map((item) => item.phrase).join(' '), [transcript])
 
@@ -28,44 +34,49 @@ export default function RecognitionWorkspace({ session }) {
 
   // Recognition loop
   useEffect(() => {
-    if (cameraState !== 'active' || modelState !== 'ready') return undefined
+    if (cameraState !== 'active') return undefined
+    
+    if (modelState !== 'ready') return undefined
 
     let running = true
 
-    const recognitionLoop = async () => {
+    const handleResult = (result) => {
+      if (result && result.confidence >= CONFIDENCE_THRESHOLD) {
+        setDetectedSign(result)
+
+        // Track stability
+        if (result.label === lastLabelRef.current) {
+          stableCountRef.current += 1
+        } else {
+          stableCountRef.current = 1
+          lastLabelRef.current = result.label
+        }
+
+        if (stableCountRef.current >= STABLE_FRAMES) {
+          setStableSign({ label: result.label, confidence: result.confidence })
+        }
+      } else {
+        setDetectedSign(result) // Show even low-confidence for feedback
+        stableCountRef.current = 0
+        lastLabelRef.current = null
+      }
+    }
+
+    const localRecognitionLoop = async () => {
       if (!running || !videoRef.current) return
 
       const video = videoRef.current
       if (video.readyState >= 2) {
         const result = await signRecognizer.processFrameAsync(video, performance.now())
-
-        if (result && result.confidence >= CONFIDENCE_THRESHOLD) {
-          setDetectedSign(result)
-
-          // Track stability
-          if (result.label === lastLabelRef.current) {
-            stableCountRef.current += 1
-          } else {
-            stableCountRef.current = 1
-            lastLabelRef.current = result.label
-          }
-
-          if (stableCountRef.current === STABLE_FRAMES) {
-            setStableSign({ label: result.label, confidence: result.confidence })
-          }
-        } else {
-          setDetectedSign(result) // Show even low-confidence for feedback
-          stableCountRef.current = 0
-          lastLabelRef.current = null
-        }
+        handleResult(result)
       }
 
       if (running) {
-        animFrameRef.current = requestAnimationFrame(recognitionLoop)
+        animFrameRef.current = requestAnimationFrame(localRecognitionLoop)
       }
     }
 
-    recognitionLoop()
+    localRecognitionLoop()
 
     return () => {
       running = false
@@ -101,7 +112,7 @@ export default function RecognitionWorkspace({ session }) {
       if (modelState !== 'ready') {
         await loadModel()
       } else {
-        setApiStatus(`Recognizing — ${signRecognizer.getSignCount()} signs`)
+        setApiStatus('Recognizing using Unified Local Model')
       }
     } catch {
       setCameraState('blocked')
@@ -162,6 +173,7 @@ export default function RecognitionWorkspace({ session }) {
       <div className="phone-stage" aria-label="ASL recognition live preview">
         <div className="camera-panel">
           <video ref={videoRef} className="camera-feed" autoPlay muted playsInline />
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
           {cameraState !== 'active' && (
             <div className="camera-placeholder">
               <span className="scan-frame" />

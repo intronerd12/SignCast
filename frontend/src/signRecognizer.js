@@ -14,13 +14,22 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 // Local fallback paths (in frontend/public/models/)
 const LOCAL_MODEL_PATH = "/models/landmark_model.onnx";
 const LOCAL_LABELS_PATH = "/models/landmark_labels.json";
+const LOCAL_SEQ_MODEL_PATH = "/models/sequence_model.onnx";
+const LOCAL_SEQ_LABELS_PATH = "/models/sequence_labels.json";
 const LOCAL_HAND_LANDMARKER_PATH = "/models/hand_landmarker.task";
 
 let handLandmarker = null;
 let onnxSession = null;
+let onnxSessionSeq = null;
 let labelMap = null; // { index: label }
+let labelMapSeq = null; 
 let isInitialized = false;
 let isInitializing = false;
+
+// 30-frame rolling buffer for dynamic sequence inference
+const SEQ_LENGTH = 30;
+let featureBuffer = [];
+let wristHistory = [];
 
 /**
  * Resolve model file URLs.
@@ -93,8 +102,8 @@ export async function init(onProgress) {
       labelMap[index] = label;
     }
 
-    // 3. Load ONNX model
-    onProgress?.("Loading recognition model...");
+    // 3. Load Static ONNX model
+    onProgress?.("Loading recognition models...");
 
     // Configure ONNX Runtime to use the correct WASM path
     ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@latest/dist/";
@@ -102,6 +111,21 @@ export async function init(onProgress) {
     onnxSession = await ort.InferenceSession.create(urls.onnx, {
       executionProviders: ["wasm"],
     });
+
+    // 4. Load Sequence Model & Labels (Local fallback only if not in URLs)
+    try {
+      const seqLabelsResponse = await fetch(LOCAL_SEQ_LABELS_PATH);
+      const seqLabelsData = await seqLabelsResponse.json();
+      labelMapSeq = {};
+      for (const [label, index] of Object.entries(seqLabelsData)) {
+        labelMapSeq[index] = label;
+      }
+      onnxSessionSeq = await ort.InferenceSession.create(LOCAL_SEQ_MODEL_PATH, {
+        executionProviders: ["wasm"],
+      });
+    } catch (err) {
+      console.warn("Sequence model not loaded:", err);
+    }
 
     isInitialized = true;
     isInitializing = false;
@@ -231,8 +255,17 @@ export async function processFrameAsync(videoElement, timestampMs) {
     features.push(lm.x - wrist.x, lm.y - wrist.y, lm.z - wrist.z);
   }
 
-  // 3. Run ONNX inference
+  // 3. Update feature and wrist buffers
+  featureBuffer.push(features);
+  wristHistory.push({ x: wrist.x, y: wrist.y });
+  if (featureBuffer.length > SEQ_LENGTH) {
+    featureBuffer.shift();
+    wristHistory.shift();
+  }
+
+  // 4. Run ONNX inference
   try {
+    // A) Static Inference
     const inputTensor = new ort.Tensor("float32", new Float32Array(features), [1, features.length]);
     const feeds = {};
     feeds[onnxSession.inputNames[0]] = inputTensor;
@@ -240,7 +273,6 @@ export async function processFrameAsync(videoElement, timestampMs) {
     const output = await onnxSession.run(feeds);
     const scores = output[onnxSession.outputNames[0]].data;
 
-    // Softmax
     const maxScore = Math.max(...scores);
     const expScores = Array.from(scores).map((s) => Math.exp(s - maxScore));
     const sumExp = expScores.reduce((a, b) => a + b, 0);
@@ -255,11 +287,58 @@ export async function processFrameAsync(videoElement, timestampMs) {
       }
     }
 
-    const recognitionResult = {
+    let recognitionResult = {
       label: labelMap[bestIdx] || `unknown_${bestIdx}`,
       confidence: Math.round(bestProb * 100),
       landmarks,
     };
+
+    // B) Sequence Inference (If buffer is full)
+    if (onnxSessionSeq && labelMapSeq && featureBuffer.length === SEQ_LENGTH) {
+      // Flatten the buffer: 30 x 63 -> 1890
+      const flatBuffer = new Float32Array(SEQ_LENGTH * features.length);
+      for (let i = 0; i < SEQ_LENGTH; i++) {
+        flatBuffer.set(featureBuffer[i], i * features.length);
+      }
+      
+      const seqTensor = new ort.Tensor("float32", flatBuffer, [1, SEQ_LENGTH, features.length]);
+      const seqFeeds = {};
+      seqFeeds[onnxSessionSeq.inputNames[0]] = seqTensor;
+      
+      const seqOutput = await onnxSessionSeq.run(seqFeeds);
+      const seqScores = seqOutput[onnxSessionSeq.outputNames[0]].data;
+      
+      const seqMaxScore = Math.max(...seqScores);
+      const seqExpScores = Array.from(seqScores).map((s) => Math.exp(s - seqMaxScore));
+      const seqSumExp = seqExpScores.reduce((a, b) => a + b, 0);
+      const seqProbabilities = seqExpScores.map((s) => s / seqSumExp);
+      
+      let seqBestIdx = 0;
+      let seqBestProb = 0;
+      for (let i = 0; i < seqProbabilities.length; i++) {
+        if (seqProbabilities[i] > seqBestProb) {
+          seqBestProb = seqProbabilities[i];
+          seqBestIdx = i;
+        }
+      }
+      
+      // Calculate total wrist movement to ensure it's actually a dynamic sign
+      let movement = 0;
+      for (let i = 1; i < SEQ_LENGTH; i++) {
+        const dx = wristHistory[i].x - wristHistory[i - 1].x;
+        const dy = wristHistory[i].y - wristHistory[i - 1].y;
+        movement += Math.sqrt(dx * dx + dy * dy);
+      }
+      
+      // If sequence model is confident AND there is significant hand movement (> 0.1 normalized distance)
+      if (seqBestProb >= 0.8 && movement > 0.1) {
+        recognitionResult = {
+          label: labelMapSeq[seqBestIdx] || `seq_unknown_${seqBestIdx}`,
+          confidence: Math.round(seqBestProb * 100),
+          landmarks,
+        };
+      }
+    }
 
     // Update cached result too
     lastResult = recognitionResult;
@@ -305,8 +384,15 @@ export function dispose() {
     onnxSession.release();
     onnxSession = null;
   }
+  if (onnxSessionSeq) {
+    onnxSessionSeq.release();
+    onnxSessionSeq = null;
+  }
   labelMap = null;
+  labelMapSeq = null;
   lastResult = null;
+  featureBuffer = [];
+  wristHistory = [];
   isInitialized = false;
   isInitializing = false;
 }

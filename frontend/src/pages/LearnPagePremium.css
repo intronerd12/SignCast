@@ -1,0 +1,817 @@
+.premium-learn-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 20px;
+  min-height: calc(100vh - 80px);
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* ── Header ──────────────────────────────────────── */
+
+.premium-header {
+  text-align: center;
+  margin-bottom: 48px;
+  animation: fadeInDown 0.6s ease-out;
+}
+
+.premium-header-icon {
+  font-size: 56px;
+  margin-bottom: 12px;
+  animation: floatBounce 3s ease-in-out infinite;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.1));
+}
+
+.premium-header h1 {
+  font-size: 48px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #1cb0f6, #a855f7, #ce82ff);
+  background-size: 200% 200%;
+  animation: gradientShift 6s ease infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0 0 12px;
+  letter-spacing: -0.03em;
+}
+
+.premium-header p {
+  font-size: 18px;
+  color: var(--muted);
+  font-weight: 500;
+  max-width: 480px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* ── Quick Stats Bar ─────────────────────────────── */
+
+.premium-quick-stats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 16px 32px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  margin-bottom: 40px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+  animation: fadeInUp 0.6s ease-out 0.2s both;
+  width: 100%;
+  max-width: 500px;
+}
+
+.quick-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.quick-stat-value {
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.quick-stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.quick-stat-divider {
+  width: 1px;
+  height: 36px;
+  background: var(--line);
+  flex-shrink: 0;
+}
+
+/* ── Test Cards Grid ──────────────────────────────── */
+
+.premium-test-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  width: 100%;
+  max-width: 700px;
+}
+
+.premium-test-card {
+  position: relative;
+  width: 100%;
+  border-radius: 32px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08), 
+              0 1px 3px rgba(0, 0, 0, 0.05),
+              inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+  animation: fadeInUp 0.8s ease-out both;
+}
+
+.premium-test-card:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.premium-test-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 30px 60px rgba(28, 176, 246, 0.12), 
+              0 1px 3px rgba(0, 0, 0, 0.05),
+              inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.premium-test-card.spell-card:hover {
+  box-shadow: 0 30px 60px rgba(206, 130, 255, 0.12), 
+              0 1px 3px rgba(0, 0, 0, 0.05),
+              inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.card-bg-gradient {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at center, rgba(28, 176, 246, 0.1) 0%, transparent 50%);
+  z-index: 0;
+  opacity: 0.6;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.premium-test-card:hover .card-bg-gradient {
+  opacity: 1;
+}
+
+.card-bg-gradient.spell-gradient {
+  background: radial-gradient(circle at center, rgba(206, 130, 255, 0.12) 0%, transparent 50%);
+}
+
+.card-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding: 40px;
+  gap: 32px;
+}
+
+.card-icon-wrapper {
+  flex-shrink: 0;
+  width: 100px;
+  height: 100px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 20px rgba(28, 176, 246, 0.2);
+  transition: transform 0.3s ease;
+}
+
+.premium-test-card:hover .card-icon-wrapper {
+  transform: scale(1.05) rotate(-3deg);
+}
+
+.card-icon-wrapper.spell-icon-wrapper {
+  background: linear-gradient(135deg, #f3e8ff, #e9d5ff);
+  box-shadow: 0 10px 20px rgba(206, 130, 255, 0.2);
+}
+
+.card-icon {
+  font-size: 48px;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+}
+
+.card-text {
+  flex: 1;
+}
+
+.card-test-label {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background: rgba(28, 176, 246, 0.12);
+  color: #0284c7;
+  margin-bottom: 8px;
+}
+
+.card-test-label.spell-label {
+  background: rgba(206, 130, 255, 0.12);
+  color: #9333ea;
+}
+
+.card-text h2 {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+}
+
+.card-text p {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.65;
+  margin: 0 0 16px;
+}
+
+.card-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  padding: 5px 10px;
+  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  transition: transform 0.15s ease;
+}
+
+.badge:hover {
+  transform: translateY(-1px);
+}
+
+.badge.camera {
+  background: rgba(28, 176, 246, 0.1);
+  color: #0284c7;
+}
+
+.badge.strikes {
+  background: rgba(255, 75, 75, 0.1);
+  color: #e11d48;
+}
+
+.badge.score {
+  background: rgba(255, 200, 0, 0.1);
+  color: #d97706;
+}
+
+.badge.signs-count {
+  background: rgba(88, 204, 2, 0.1);
+  color: #2b6e00;
+}
+
+.badge.signs-count.spell-badge {
+  background: rgba(168, 85, 247, 0.1);
+  color: #7c3aed;
+}
+
+/* ── Start Buttons ───────────────────────────────── */
+
+.premium-start-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, #1cb0f6, #0ea5e9);
+  color: white;
+  border: none;
+  border-radius: 100px;
+  padding: 16px 32px;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 8px 24px rgba(28, 176, 246, 0.3), 0 2px 0 rgba(14, 116, 169, 0.5);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.premium-start-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.premium-start-btn:hover::after {
+  opacity: 1;
+}
+
+.premium-start-btn:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 14px 32px rgba(28, 176, 246, 0.35), 0 2px 0 rgba(14, 116, 169, 0.5);
+}
+
+.premium-start-btn:active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow: 0 4px 12px rgba(28, 176, 246, 0.3), 0 1px 0 rgba(14, 116, 169, 0.5);
+}
+
+.premium-start-btn.spell-start-btn {
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  box-shadow: 0 8px 24px rgba(168, 85, 247, 0.3), 0 2px 0 rgba(109, 40, 217, 0.5);
+}
+
+.premium-start-btn.spell-start-btn:hover {
+  box-shadow: 0 14px 32px rgba(168, 85, 247, 0.35), 0 2px 0 rgba(109, 40, 217, 0.5);
+}
+
+.btn-text {
+  position: relative;
+  z-index: 1;
+}
+
+.btn-arrow {
+  font-size: 20px;
+  transition: transform 0.2s ease;
+  position: relative;
+  z-index: 1;
+}
+
+.premium-start-btn:hover .btn-arrow {
+  transform: translateX(4px);
+}
+
+.submit-pose-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+}
+
+/* ── Word Spelling Letter Tiles ──────────────────── */
+
+.spell-word-counter {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 12px 0 4px;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.spell-word-display {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 20px 0;
+  flex-wrap: wrap;
+}
+
+.spell-letter-tile {
+  position: relative;
+  width: 72px;
+  height: 88px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 900;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: tilePopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  overflow: hidden;
+}
+
+.spell-letter-tile.future {
+  background: var(--panel);
+  border: 2px dashed rgba(150, 150, 150, 0.25);
+  color: rgba(150, 150, 150, 0.35);
+}
+
+.spell-letter-tile.active {
+  background: var(--panel);
+  border: 3px solid var(--tile-color, #ce82ff);
+  color: var(--tile-color, #ce82ff);
+  box-shadow: 0 0 24px rgba(206, 130, 255, 0.2), 0 8px 24px rgba(0, 0, 0, 0.06);
+  animation: tilePopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both, tilePulse 2s ease-in-out infinite;
+}
+
+.spell-letter-tile.completed {
+  background: linear-gradient(135deg, #58cc02, #46a800);
+  border: 3px solid #58cc02;
+  color: white;
+  box-shadow: 0 6px 16px rgba(88, 204, 2, 0.3);
+  animation: tileComplete 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.spell-letter-char {
+  position: relative;
+  z-index: 1;
+}
+
+.spell-letter-check {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 13px;
+  font-weight: 900;
+  color: white;
+  opacity: 0.85;
+}
+
+.spell-letter-cursor {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--tile-color, #ce82ff);
+  animation: cursorBlink 1s step-end infinite;
+}
+
+/* ── Completed Words Display (Celebration) ──────── */
+
+.spell-completed-words {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 4px 0;
+}
+
+.spell-completed-word {
+  display: inline-block;
+  padding: 6px 16px;
+  background: rgba(88, 204, 2, 0.1);
+  color: #2b6e00;
+  border: 1px solid rgba(88, 204, 2, 0.25);
+  border-radius: 100px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  animation: wordBadgePop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.spell-completed-word:nth-child(2) { animation-delay: 0.1s; }
+.spell-completed-word:nth-child(3) { animation-delay: 0.2s; }
+.spell-completed-word:nth-child(4) { animation-delay: 0.3s; }
+
+/* ── Test Feedback Banner ────────────────────────── */
+
+.test-feedback-banner {
+  width: 100%;
+  max-width: 480px;
+  padding: 14px 20px;
+  border-radius: 14px;
+  text-align: center;
+  animation: feedbackSlideUp 0.3s ease;
+  margin-top: 14px;
+}
+
+.test-feedback-banner.correct,
+.test-feedback-banner.word-done {
+  background: rgba(88, 204, 2, 0.08);
+  border: 1px solid rgba(88, 204, 2, 0.25);
+}
+
+.test-feedback-banner.incorrect {
+  background: rgba(255, 75, 75, 0.08);
+  border: 1px solid rgba(255, 75, 75, 0.25);
+}
+
+.test-feedback-banner .test-feedback-text {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.test-feedback-banner.correct .test-feedback-text,
+.test-feedback-banner.word-done .test-feedback-text {
+  color: #2b6e00;
+}
+
+.test-feedback-banner.incorrect .test-feedback-text {
+  color: #cc0000;
+}
+
+/* ── Gameover Stats ──────────────────────────────── */
+
+.gameover-stats {
+  display: flex;
+  gap: 32px;
+  margin: 8px 0 16px;
+}
+
+.gameover-stat {
+  text-align: center;
+}
+
+.gameover-stat strong {
+  display: block;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.gameover-stat span {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ── Recent Scores Section ───────────────────────── */
+
+.recent-scores-container {
+  width: 100%;
+  max-width: 700px;
+  margin-top: 48px;
+  animation: fadeInUp 1s ease-out 0.3s both;
+}
+
+.recent-scores-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 0 4px;
+}
+
+.recent-scores-header h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+}
+
+.recent-scores-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--panel);
+  padding: 4px 12px;
+  border-radius: 100px;
+  border: 1px solid var(--line);
+}
+
+.recent-scores-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recent-score-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--panel);
+  padding: 14px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.recent-score-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.04);
+}
+
+.recent-score-card.spell-score {
+  border-left: 3px solid rgba(206, 130, 255, 0.4);
+}
+
+.recent-score-card.high-score {
+  background: linear-gradient(135deg, rgba(255, 200, 0, 0.04), var(--panel));
+  border-color: rgba(255, 200, 0, 0.2);
+}
+
+.score-icon-col {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--page);
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.score-icon {
+  font-size: 20px;
+}
+
+.score-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.score-date {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.score-type {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.high-score-badge {
+  font-size: 10px;
+  font-weight: 800;
+  color: #d97706;
+  background: rgba(255, 200, 0, 0.15);
+  padding: 2px 8px;
+  border-radius: 100px;
+  letter-spacing: 0.04em;
+}
+
+.score-value {
+  background: rgba(88, 204, 2, 0.1);
+  color: #58cc02;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.score-value strong {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.score-value span {
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.score-value.spell-value {
+  background: rgba(206, 130, 255, 0.1);
+  color: #a855f7;
+}
+
+/* ── Tile Animations ─────────────────────────────── */
+
+@keyframes tilePopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes tilePulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(206, 130, 255, 0.2), 0 8px 24px rgba(0, 0, 0, 0.06);
+  }
+  50% {
+    box-shadow: 0 0 32px rgba(206, 130, 255, 0.35), 0 8px 24px rgba(0, 0, 0, 0.06);
+  }
+}
+
+@keyframes tileComplete {
+  0% {
+    transform: scale(1.25) rotateY(180deg);
+  }
+  60% {
+    transform: scale(1.05) rotateY(0deg);
+  }
+  100% {
+    transform: scale(1) rotateY(0deg);
+  }
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes wordBadgePop {
+  0% { opacity: 0; transform: scale(0.6); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ── General Animations ──────────────────────────── */
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes floatBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes feedbackSlideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Responsive ──────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .premium-header h1 {
+    font-size: 34px;
+  }
+
+  .premium-header-icon {
+    font-size: 44px;
+  }
+  
+  .card-content {
+    flex-direction: column;
+    text-align: center;
+    padding: 28px 24px;
+  }
+  
+  .card-badges {
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+  
+  .premium-start-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .spell-letter-tile {
+    width: 56px;
+    height: 70px;
+    font-size: 26px;
+    border-radius: 12px;
+  }
+
+  .spell-word-display {
+    gap: 10px;
+  }
+
+  .premium-quick-stats {
+    gap: 16px;
+    padding: 14px 20px;
+  }
+
+  .quick-stat-value {
+    font-size: 20px;
+  }
+
+  .recent-score-card {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .score-icon-col {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 480px) {
+  .premium-header h1 {
+    font-size: 28px;
+  }
+
+  .card-text h2 {
+    font-size: 22px;
+  }
+
+  .card-text p {
+    font-size: 13px;
+  }
+
+  .badge {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+
+  .spell-letter-tile {
+    width: 48px;
+    height: 60px;
+    font-size: 22px;
+    border-radius: 10px;
+  }
+}

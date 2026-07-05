@@ -5,6 +5,13 @@ export default function DashboardPage({ session }) {
   const firstName = displayName.split(' ')[0] || 'there'
   const dashboardCards = [
     {
+      href: '#/learn',
+      label: 'Learn',
+      title: 'Learn FSL',
+      body: 'Master Filipino Sign Language with Duolingo-style lessons, quizzes, and progress tracking.',
+      metric: '🔤',
+    },
+    {
       href: '#/recognizer',
       label: 'Translate',
       title: 'Live recognition',
