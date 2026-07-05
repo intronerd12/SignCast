@@ -3,7 +3,7 @@ import { API_BASE, getDisplayName, getInitials } from '../helpers.js'
 
 const dailyTranslationData = [14, 32, 21, 42, 34, 74, 62, 55, 77, 81, 94]
 
-export default function ProfilePage({ session, onSessionUpdated }) {
+export default function ProfilePage({ session, onSessionUpdated, themePreference, onThemePreferenceChange }) {
   const [profile, setProfile] = useState({
     name: session?.name || '',
     email: session?.email || '',
@@ -18,11 +18,9 @@ export default function ProfilePage({ session, onSessionUpdated }) {
     recentLabels: [],
   })
   const [settings, setSettings] = useState({
-    offlineMode: true,
     audibleTts: true,
     audibleFeedback: true,
     language: 'Filipino Sign Language',
-    theme: 'Light',
   })
   const [uploadStatus, setUploadStatus] = useState({ type: '', message: '' })
   const [isUploadingImage, setIsUploadingImage] = useState(false)
@@ -258,10 +256,6 @@ export default function ProfilePage({ session, onSessionUpdated }) {
             <span>Synced locally</span>
           </div>
           <div className="settings-grid">
-            <label className="toggle-row">
-              <span>Offline Mode</span>
-              <input type="checkbox" checked={settings.offlineMode} onChange={() => toggleSetting('offlineMode')} />
-            </label>
             <label className="settings-select">
               <span>Default Language</span>
               <select value={settings.language} onChange={(event) => setSettings((current) => ({ ...current, language: event.target.value }))}>
@@ -276,10 +270,10 @@ export default function ProfilePage({ session, onSessionUpdated }) {
             </label>
             <label className="settings-select">
               <span>Theme</span>
-              <select value={settings.theme} onChange={(event) => setSettings((current) => ({ ...current, theme: event.target.value }))}>
-                <option>Light</option>
-                <option>Dark</option>
-                <option>System</option>
+              <select value={themePreference} onChange={(event) => onThemePreferenceChange(event.target.value)}>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+                <option value="system">System</option>
               </select>
             </label>
             <label className="toggle-row">
