@@ -1,6 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { API_BASE, getDisplayName, getInitials } from '../helpers.js'
 import { AdminBrandLogo, AdminNavIcon } from '../components/AdminIcons.jsx'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 
 export default function AdminPage({ session, onLogout }) {
   const [activeSection, setActiveSection] = useState('dashboard')
@@ -34,6 +38,17 @@ export default function AdminPage({ session, onLogout }) {
     uptime: 'Checking...',
   })
 
+  const [spedCenters, setSpedCenters] = useState([])
+  const [isSpedLoading, setIsSpedLoading] = useState(false)
+  const [spedStatus, setSpedStatus] = useState('Load SPED centers from OpenStreetMap')
+  const [spedError, setSpedError] = useState('')
+  const [selectedSpedCenter, setSelectedSpedCenter] = useState(null)
+
+  const spedMapRef = useRef(null)
+  const spedMapInstanceRef = useRef(null)
+  const spedMarkerLayerRef = useRef(null)
+  const spedMarkerRefs = useRef(new Map())
+
   // Basic info
   const [userCount, setUserCount] = useState(0)
 
@@ -47,9 +62,7 @@ export default function AdminPage({ session, onLogout }) {
     ['dictionary', 'dictionary', 'FSL Dictionary'],
     ['training', 'training', 'Model Training'],
     ['centers', 'centers', 'SPED Centers'],
-    ['health', 'health', 'System Health'],
     ['audit', 'audit', 'Audit Logs'],
-    ['api', 'api', 'API Settings'],
     ['reports', 'reports', 'Reports'],
   ]
 
@@ -177,11 +190,167 @@ export default function AdminPage({ session, onLogout }) {
     }
   }
 
+  const normalizeSpedCenter = (item) => {
+    const lat = Number.parseFloat(item?.lat)
+    const lon = Number.parseFloat(item?.lon)
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
+
+    const displayName = (item?.display_name || 'Unknown center').trim()
+    const parts = displayName.split(',').map(part => part.trim()).filter(Boolean)
+
+    return {
+      id: item?.place_id || `${lat}-${lon}`,
+      name: parts[0] || 'SPED Center',
+      address: displayName,
+      region: parts.slice(-2).join(', ') || 'Philippines',
+      lat,
+      lon,
+      type: item?.type || item?.class || 'education',
+    }
+  }
+
+  const loadSpedCenters = async () => {
+    setIsSpedLoading(true)
+    setSpedError('')
+    setSpedStatus('Loading SPED centers from OpenStreetMap...')
+
+    try {
+      const queries = [
+        'special education school philippines',
+        'sped center philippines',
+        'special needs school philippines',
+      ]
+
+      const results = await Promise.allSettled(
+        queries.map((query) =>
+          fetch(
+            `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&countrycodes=ph&limit=25&q=${encodeURIComponent(query)}`
+          )
+        )
+      )
+
+      const merged = []
+      for (const result of results) {
+        if (result.status !== 'fulfilled' || !result.value.ok) continue
+        const payload = await result.value.json()
+        if (Array.isArray(payload)) merged.push(...payload)
+      }
+
+      const dedupe = new Map()
+      for (const item of merged) {
+        const normalized = normalizeSpedCenter(item)
+        if (!normalized) continue
+        const key = `${normalized.name.toLowerCase()}|${normalized.lat.toFixed(4)}|${normalized.lon.toFixed(4)}`
+        if (!dedupe.has(key)) dedupe.set(key, normalized)
+      }
+
+      const centers = Array.from(dedupe.values()).sort((a, b) => a.name.localeCompare(b.name))
+      setSpedCenters(centers)
+
+      if (centers.length > 0) {
+        setSelectedSpedCenter(centers[0])
+        setSpedStatus(`${centers.length} SPED-related centers found via OpenStreetMap API`)
+      } else {
+        setSpedStatus('No SPED centers found from OpenStreetMap API for this query.')
+      }
+    } catch (error) {
+      setSpedError(error.message || 'Unable to load SPED centers map data.')
+      setSpedStatus('Failed to load SPED centers')
+    } finally {
+      setIsSpedLoading(false)
+    }
+  }
+
+  const focusSpedCenter = (center) => {
+    if (!center) return
+    setSelectedSpedCenter(center)
+
+    const map = spedMapInstanceRef.current
+    if (!map) return
+
+    map.flyTo([center.lat, center.lon], 12, {
+      animate: true,
+      duration: 0.8,
+    })
+
+    const marker = spedMarkerRefs.current.get(center.id)
+    if (marker) {
+      marker.openPopup()
+    }
+  }
+
   useEffect(() => {
     loadAdminData()
     // Refresh data every 5 minutes automatically
     const interval = setInterval(loadAdminData, 300000)
     return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    if (activeSection !== 'centers' || spedCenters.length > 0 || isSpedLoading) return
+    loadSpedCenters()
+  }, [activeSection])
+
+  useEffect(() => {
+    if (activeSection !== 'centers' || !spedMapRef.current || spedMapInstanceRef.current) return
+
+    const map = L.map(spedMapRef.current, {
+      zoomControl: true,
+      scrollWheelZoom: false,
+    }).setView([12.8797, 121.774], 6)
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map)
+
+    spedMapInstanceRef.current = map
+    spedMarkerLayerRef.current = L.layerGroup().addTo(map)
+  }, [activeSection])
+
+  useEffect(() => {
+    const map = spedMapInstanceRef.current
+    const layer = spedMarkerLayerRef.current
+    if (!map || !layer) return
+
+    layer.clearLayers()
+    spedMarkerRefs.current.clear()
+    const validCenters = spedCenters.filter(center => Number.isFinite(center.lat) && Number.isFinite(center.lon))
+
+    validCenters.forEach((center) => {
+      const marker = L.circleMarker([center.lat, center.lon], {
+        radius: 7,
+        color: '#1f7a58',
+        weight: 2,
+        fillColor: '#7de2b9',
+        fillOpacity: 0.88,
+      })
+
+      marker.bindPopup(`<strong>${center.name}</strong><br/>${center.address}`)
+      marker.on('click', () => setSelectedSpedCenter(center))
+      layer.addLayer(marker)
+      spedMarkerRefs.current.set(center.id, marker)
+    })
+
+    if (validCenters.length > 1) {
+      const bounds = L.latLngBounds(validCenters.map(center => [center.lat, center.lon]))
+      map.fitBounds(bounds, { padding: [26, 26] })
+    } else if (validCenters.length === 1) {
+      map.setView([validCenters[0].lat, validCenters[0].lon], 12)
+    } else {
+      map.setView([12.8797, 121.774], 6)
+    }
+  }, [spedCenters])
+
+  useEffect(() => {
+    return () => {
+      if (spedMapInstanceRef.current) {
+        spedMapInstanceRef.current.remove()
+        spedMapInstanceRef.current = null
+        spedMarkerLayerRef.current = null
+        spedMarkerRefs.current.clear()
+      }
+    }
   }, [])
 
   // Derived user filtering
@@ -199,6 +368,234 @@ export default function AdminPage({ session, onLogout }) {
       hour: 'numeric',
       minute: '2-digit',
     })
+  }
+
+  const sanitizeCsvValue = (value) => {
+    if (value === null || value === undefined) return ''
+    const text = String(value).replace(/\r?\n|\r/g, ' ').trim()
+    return `"${text.replace(/"/g, '""')}"`
+  }
+
+  const downloadFile = (blob, filename) => {
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  const exportReportsCsv = () => {
+    const now = new Date()
+    const rows = []
+
+    rows.push(['SignCast Admin Report'])
+    rows.push(['Generated At', now.toISOString()])
+    rows.push(['Generated By', adminName || session?.email || 'Admin'])
+    rows.push([])
+
+    rows.push(['Summary'])
+    rows.push(['Metric', 'Value'])
+    rows.push(['Total Users', userCount])
+    rows.push(['Tests Completed', stats.totalScores])
+    rows.push(['FSL Samples DB', stats.totalSamples])
+    rows.push(['Verified Samples', stats.verifiedSamples])
+    rows.push(['Unique Labels', stats.uniqueLabels])
+    rows.push([])
+
+    rows.push(['Scores By Test Type'])
+    rows.push(['Test Type', 'Count'])
+    if ((stats.scoresByType || []).length === 0) {
+      rows.push(['No data', 0])
+    } else {
+      stats.scoresByType.forEach((item) => {
+        rows.push([item.type, item.count])
+      })
+    }
+    rows.push([])
+
+    rows.push(['Top Scorers Leaderboard'])
+    rows.push(['Rank', 'Name', 'Email', 'Highest Score', 'Test Type'])
+    if ((stats.topScorers || []).length === 0) {
+      rows.push(['-', 'No records', '', '', ''])
+    } else {
+      stats.topScorers.forEach((scorer, index) => {
+        rows.push([
+          index + 1,
+          scorer.name || 'Anonymous',
+          scorer.email || '',
+          scorer.score || 0,
+          scorer.test_type || '',
+        ])
+      })
+    }
+
+    const csv = rows
+      .map((row) => row.map(sanitizeCsvValue).join(','))
+      .join('\n')
+
+    const stamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const filename = `signcast-report-${stamp}.csv`
+    downloadFile(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), filename)
+    setActionStatus({ type: 'success', message: 'CSV report downloaded.' })
+  }
+
+  const exportReportsPdf = () => {
+    try {
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const margin = 30
+      const contentWidth = pageWidth - margin * 2
+      const generatedAt = new Date()
+
+      // Outer page border
+      doc.setDrawColor(207, 217, 228)
+      doc.setLineWidth(1)
+      doc.rect(margin - 10, margin - 10, pageWidth - (margin - 10) * 2, pageHeight - (margin - 10) * 2)
+
+      // Header band
+      doc.setFillColor(13, 53, 41)
+      doc.roundedRect(margin, margin, contentWidth, 82, 10, 10, 'F')
+
+      // Simple logo box
+      doc.setFillColor(225, 255, 241)
+      doc.roundedRect(margin + 16, margin + 16, 50, 50, 9, 9, 'F')
+      doc.setTextColor(15, 59, 45)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(20)
+      doc.text('SC', margin + 41, margin + 47, { align: 'center' })
+
+      doc.setTextColor(255, 255, 255)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(21)
+      doc.text('SignCast', margin + 80, margin + 38)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(11)
+      doc.text('Admin Performance Report', margin + 80, margin + 58)
+
+      doc.setFontSize(9)
+      doc.text(`Generated: ${generatedAt.toLocaleString()}`, pageWidth - margin - 14, margin + 36, { align: 'right' })
+      doc.text(`Prepared by: ${adminName || session?.email || 'Administrator'}`, pageWidth - margin - 14, margin + 54, { align: 'right' })
+
+      // Summary cards
+      const summaryTop = margin + 100
+      const summaryGap = 10
+      const summaryCardWidth = (contentWidth - summaryGap * 3) / 4
+      const summaryCardHeight = 74
+      const summaryItems = [
+        ['Total Users', userCount.toLocaleString()],
+        ['Tests Completed', stats.totalScores.toLocaleString()],
+        ['FSL Samples', stats.totalSamples.toLocaleString()],
+        ['Verified Samples', stats.verifiedSamples.toLocaleString()],
+      ]
+
+      summaryItems.forEach(([label, value], index) => {
+        const x = margin + index * (summaryCardWidth + summaryGap)
+        doc.setFillColor(247, 251, 249)
+        doc.setDrawColor(196, 227, 213)
+        doc.roundedRect(x, summaryTop, summaryCardWidth, summaryCardHeight, 8, 8, 'FD')
+        doc.setTextColor(39, 120, 92)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(9)
+        doc.text(label.toUpperCase(), x + 10, summaryTop + 22)
+        doc.setTextColor(15, 23, 42)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(18)
+        doc.text(value, x + 10, summaryTop + 50)
+      })
+
+      const reportBodyY = summaryTop + summaryCardHeight + 24
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(15, 23, 42)
+      doc.setFontSize(12)
+      doc.text('Scores by Test Type', margin, reportBodyY)
+
+      autoTable(doc, {
+        startY: reportBodyY + 8,
+        margin: { left: margin, right: margin },
+        styles: {
+          font: 'helvetica',
+          fontSize: 10,
+          cellPadding: 6,
+          lineColor: [220, 228, 236],
+          lineWidth: 0.6,
+          textColor: [17, 24, 39],
+        },
+        headStyles: {
+          fillColor: [232, 245, 238],
+          textColor: [12, 53, 41],
+          fontStyle: 'bold',
+          lineColor: [180, 214, 198],
+        },
+        body: (stats.scoresByType || []).length > 0
+          ? stats.scoresByType.map((item) => [
+              (item.type || 'unknown').toString().replace(/-/g, ' '),
+              Number(item.count || 0).toLocaleString(),
+            ])
+          : [['No data available', '0']],
+        head: [['Test Type', 'Count']],
+        tableLineColor: [180, 214, 198],
+        tableLineWidth: 0.8,
+      })
+
+      const nextY = doc.lastAutoTable.finalY + 18
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(12)
+      doc.text('Top Scorers Leaderboard', margin, nextY)
+
+      autoTable(doc, {
+        startY: nextY + 8,
+        margin: { left: margin, right: margin },
+        styles: {
+          font: 'helvetica',
+          fontSize: 9,
+          cellPadding: 6,
+          lineColor: [220, 228, 236],
+          lineWidth: 0.6,
+          textColor: [17, 24, 39],
+        },
+        headStyles: {
+          fillColor: [232, 245, 238],
+          textColor: [12, 53, 41],
+          fontStyle: 'bold',
+          lineColor: [180, 214, 198],
+        },
+        body: (stats.topScorers || []).length > 0
+          ? stats.topScorers.slice(0, 12).map((scorer, index) => [
+              String(index + 1),
+              scorer.name || 'Anonymous',
+              scorer.email || 'N/A',
+              `${Number(scorer.score || 0).toLocaleString()} pts`,
+              (scorer.test_type || 'n/a').toString(),
+            ])
+          : [['-', 'No records available', '', '', '']],
+        head: [['Rank', 'User', 'Email', 'Highest Score', 'Test Type']],
+        tableLineColor: [180, 214, 198],
+        tableLineWidth: 0.8,
+      })
+
+      // Footer on all pages
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let page = 1; page <= pageCount; page += 1) {
+        doc.setPage(page)
+        doc.setDrawColor(225, 232, 238)
+        doc.line(margin, pageHeight - 44, pageWidth - margin, pageHeight - 44)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(9)
+        doc.setTextColor(100, 116, 139)
+        doc.text('SignCast Admin Portal • Confidential Internal Report', margin, pageHeight - 26)
+        doc.text(`Page ${page} of ${pageCount}`, pageWidth - margin, pageHeight - 26, { align: 'right' })
+      }
+
+      const stamp = generatedAt.toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      doc.save(`signcast-report-${stamp}.pdf`)
+      setActionStatus({ type: 'success', message: 'PDF report downloaded successfully.' })
+    } catch (error) {
+      setActionStatus({ type: 'error', message: `Unable to export PDF: ${error.message}` })
+    }
   }
 
   // Admin Actions
@@ -274,8 +671,7 @@ export default function AdminPage({ session, onLogout }) {
   const getSectionSummary = () => {
     if (activeSection === 'users') return `${filteredUsers.length} accounts matching search`
     if (activeSection === 'dictionary') return `${stats.uniqueLabels} unique signs recorded`
-    if (activeSection === 'health') return healthData.cloudServices
-    if (activeSection === 'api') return `Average latency ${healthData.latency || '...'}`
+    if (activeSection === 'centers') return spedStatus
     return adminStatus
   }
 
@@ -505,9 +901,10 @@ export default function AdminPage({ session, onLogout }) {
           <div className="dictionary-categories">
             {stats.samplesByCategory.map(cat => (
               <div key={cat.category} className="dictionary-category-block">
-                <h3 style={{fontSize: '16px', marginBottom: '12px', textTransform: 'capitalize'}}>
-                  {cat.category} <span style={{color: 'var(--muted)', fontWeight: 'normal', fontSize: '14px'}}>({cat.count} samples, {cat.uniqueLabels} unique signs)</span>
-                </h3>
+                <div className="dictionary-category-header">
+                  <h3>{cat.category || 'uncategorized'}</h3>
+                  <p>{cat.count} samples • {cat.uniqueLabels} unique signs</p>
+                </div>
                 <div className="admin-dictionary-list">
                   {cat.labels.map((label) => (
                     <span key={label}>{label}</span>
@@ -604,24 +1001,38 @@ export default function AdminPage({ session, onLogout }) {
   )
 
   const renderReports = () => (
-    <div className="admin-content-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gridTemplateAreas: '"metrics metrics" "table config"' }}>
-      <section className="admin-metrics" style={{gridArea: 'metrics'}}>
-         {stats.scoresByType.map(stat => (
-            <article key={stat.type} className="admin-stat-card">
-              <span className="admin-stat-icon">📝</span>
-              <p>{stat.type.replace('-', ' ')} Tests</p>
-              <strong>{stat.count}</strong>
-            </article>
-         ))}
+    <div className="admin-content-grid admin-reports-grid">
+      <section className="admin-metrics admin-reports-metrics" style={{gridArea: 'metrics'}}>
+        <article className="admin-stat-card">
+          <span className="admin-stat-icon">🧮</span>
+          <p>Total Tests Recorded</p>
+          <strong>{stats.totalScores.toLocaleString()}</strong>
+        </article>
+        <article className="admin-stat-card">
+          <span className="admin-stat-icon">🧪</span>
+          <p>Test Types Tracked</p>
+          <strong>{stats.scoresByType.length.toLocaleString()}</strong>
+        </article>
+        <article className="admin-stat-card">
+          <span className="admin-stat-icon">🏆</span>
+          <p>Highest Recorded Score</p>
+          <strong>{stats.topScorers[0]?.score ? `${stats.topScorers[0].score} pts` : '0 pts'}</strong>
+        </article>
+        <article className="admin-stat-card">
+          <span className="admin-stat-icon">📅</span>
+          <p>Active Days Tracked</p>
+          <strong>{stats.dailyScores.length.toLocaleString()}</strong>
+        </article>
       </section>
 
-      <section className="admin-table-card" style={{gridArea: 'table'}}>
+      <section className="admin-table-card admin-reports-table" style={{gridArea: 'table'}}>
         <div className="admin-card-heading">
           <p className="eyebrow">Top Scorers Leaderboard</p>
         </div>
         {stats.topScorers.length === 0 ? (
-          <div className="admin-empty-state">
+          <div className="admin-empty-state admin-reports-empty">
             <p>No scores recorded yet.</p>
+            <span>Leaderboard data will appear after users complete test sessions.</span>
           </div>
         ) : (
           <div className="admin-table-wrap">
@@ -652,13 +1063,55 @@ export default function AdminPage({ session, onLogout }) {
         )}
       </section>
 
-      <aside className="admin-config-card" style={{gridArea: 'config'}}>
+      <section className="admin-table-card admin-reports-distribution" style={{ gridArea: 'distribution' }}>
+        <div className="admin-card-heading" style={{ marginBottom: '10px' }}>
+          <p className="eyebrow">Score Distribution By Test Type</p>
+        </div>
+
+        {stats.scoresByType.length === 0 ? (
+          <div className="admin-empty-state admin-reports-empty compact">
+            <p>No test-type distribution available.</p>
+          </div>
+        ) : (
+          <div className="admin-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Test Type</th>
+                  <th>Total Attempts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.scoresByType.map((item) => (
+                  <tr key={item.type}>
+                    <td style={{ textTransform: 'capitalize' }}>{(item.type || 'unknown').replace(/-/g, ' ')}</td>
+                    <td><strong>{item.count}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <aside className="admin-config-card admin-reports-export" style={{gridArea: 'config'}}>
         <div className="admin-card-heading">
            <p className="eyebrow">Report Export Options</p>
         </div>
-        <div className="admin-empty-state" style={{padding: '40px 20px', textAlign: 'center'}}>
-           <p>CSV and PDF reporting functionality is coming soon.</p>
-           <button className="admin-action-button neutral" style={{marginTop: '12px'}} disabled>Export CSV (Soon)</button>
+        <div className="report-export-panel">
+          <p>Download a professional SignCast report with branded header, bordered tables, and latest admin analytics.</p>
+          <div className="report-export-buttons">
+            <button className="admin-action-button success" onClick={exportReportsPdf}>Download PDF Report</button>
+            <button className="admin-action-button neutral" onClick={exportReportsCsv}>Download CSV Data</button>
+          </div>
+          <div className="report-export-meta">
+            <span>Cloud: {healthData.cloudServices}</span>
+            <span>Uptime: {healthData.uptime}</span>
+            <span>Last Sync: {lastSynced ? formatAdminDate(lastSynced) : 'Never'}</span>
+            <span>Unique Labels: {stats.uniqueLabels.toLocaleString()}</span>
+            <span>Verified Samples: {stats.verifiedSamples.toLocaleString()}</span>
+            <span>Admin Status: {adminStatus}</span>
+          </div>
         </div>
       </aside>
     </div>
@@ -702,6 +1155,90 @@ export default function AdminPage({ session, onLogout }) {
         </div>
       )}
     </section>
+  )
+
+  const renderSpedCenters = () => (
+    <div className="admin-content-grid" style={{ gridTemplateColumns: 'minmax(0, 1.15fr) minmax(330px, 0.85fr)', gridTemplateAreas: '"map table"' }}>
+      <section className="admin-table-card admin-sped-map-card" style={{ gridArea: 'map' }}>
+        <div className="admin-card-heading">
+          <p className="eyebrow">SPED Centers Map (Philippines)</p>
+          <span>{spedStatus}</span>
+        </div>
+
+        <div ref={spedMapRef} className="admin-sped-map" aria-label="SPED centers map" />
+
+        {isSpedLoading && (
+          <div className="admin-sped-map-overlay">
+            <p>Loading map points from OpenStreetMap...</p>
+          </div>
+        )}
+
+        {selectedSpedCenter && (
+          <div className="admin-sped-selected">
+            <strong>{selectedSpedCenter.name}</strong>
+            <span>{selectedSpedCenter.address}</span>
+            <a
+              href={`https://www.openstreetmap.org/?mlat=${selectedSpedCenter.lat}&mlon=${selectedSpedCenter.lon}#map=14/${selectedSpedCenter.lat}/${selectedSpedCenter.lon}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open in OpenStreetMap
+            </a>
+          </div>
+        )}
+      </section>
+
+      <section className="admin-table-card" style={{ gridArea: 'table' }}>
+        <div className="admin-card-heading">
+          <p className="eyebrow">Detected Centers</p>
+          <button className="admin-action-button neutral" onClick={loadSpedCenters} disabled={isSpedLoading}>
+            {isSpedLoading ? 'Refreshing...' : 'Refresh Map Data'}
+          </button>
+        </div>
+
+        {spedError ? (
+          <div className="admin-empty-state">
+            <p>{spedError}</p>
+          </div>
+        ) : spedCenters.length === 0 ? (
+          <div className="admin-empty-state">
+            <p>No SPED centers available yet. Try refreshing map data.</p>
+          </div>
+        ) : (
+          <div className="admin-table-wrap" style={{ maxHeight: '520px', overflowY: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Center</th>
+                  <th>Region</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {spedCenters.map((center) => (
+                  <tr key={center.id}>
+                    <td>
+                      <button
+                        type="button"
+                        className="admin-link-button"
+                        onClick={() => focusSpedCenter(center)}
+                      >
+                        {center.name}
+                      </button>
+                      <div style={{ fontSize: '12px', color: '#6b7280', maxWidth: '320px', whiteSpace: 'normal' }}>{center.address}</div>
+                    </td>
+                    <td>{center.region}</td>
+                    <td>
+                      <button className="admin-action-button success" onClick={() => focusSpedCenter(center)}>Locate</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
   )
 
   const renderPlaceholder = (title) => (
@@ -817,16 +1354,14 @@ export default function AdminPage({ session, onLogout }) {
           </a>
         </header>
 
-        <div className="admin-content-grid" style={activeSection !== 'dashboard' && activeSection !== 'reports' && activeSection !== 'dictionary' && activeSection !== 'training' ? { gridTemplateColumns: '1fr', gridTemplateAreas: '"table"' } : {}}>
+        <div className="admin-content-grid" style={activeSection !== 'dashboard' && activeSection !== 'dictionary' && activeSection !== 'training' ? { gridTemplateColumns: '1fr', gridTemplateAreas: '"table"' } : {}}>
           {activeSection === 'dashboard' && renderDashboard()}
           {activeSection === 'users' && renderUsers()}
           {activeSection === 'dictionary' && renderDictionary()}
           {activeSection === 'training' && renderTraining()}
           {activeSection === 'reports' && renderReports()}
           {activeSection === 'audit' && renderAuditLogs()}
-          {activeSection === 'centers' && renderPlaceholder('SPED Centers Module')}
-          {activeSection === 'health' && renderPlaceholder('Advanced System Health')}
-          {activeSection === 'api' && renderPlaceholder('API Configuration')}
+          {activeSection === 'centers' && renderSpedCenters()}
         </div>
 
         <footer className="admin-footer">

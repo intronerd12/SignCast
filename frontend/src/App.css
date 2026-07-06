@@ -1351,7 +1351,7 @@ main {
 .sentence {
   min-height: 88px;
   color: #7a8792;
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.3;
 }
@@ -2333,6 +2333,7 @@ main {
 .admin-main {
   min-width: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
 }
 
@@ -2477,8 +2478,26 @@ main {
 .admin-config-card {
   background: #ffffff;
   border: 1px solid rgba(216, 226, 234, 0.95);
-  border-radius: 12px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.09);
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+.admin-chart-card,
+.admin-table-card,
+.admin-config-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-chart-card:before,
+.admin-table-card:before,
+.admin-config-card:before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, rgba(98, 207, 161, 0.66), rgba(28, 176, 246, 0.45));
+  opacity: 0.65;
 }
 
 .admin-stat-card {
@@ -2591,6 +2610,128 @@ main {
   padding: 20px;
 }
 
+.report-export-panel {
+  display: grid;
+  gap: 14px;
+  padding: 8px 2px 4px;
+}
+
+.report-export-panel p {
+  margin: 0;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+.report-export-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.report-export-buttons .admin-action-button {
+  min-height: 40px;
+  width: 100%;
+}
+
+.admin-reports-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "metrics metrics"
+    "table config"
+    "distribution config";
+  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  align-content: stretch;
+  min-height: calc(100vh - 208px);
+  gap: 12px;
+}
+
+.admin-reports-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-reports-table,
+.admin-reports-distribution,
+.admin-reports-export {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.admin-reports-table,
+.admin-reports-distribution {
+  gap: 12px;
+}
+
+.admin-reports-table .admin-empty-state,
+.admin-reports-table .admin-table-wrap,
+.admin-reports-distribution .admin-empty-state,
+.admin-reports-distribution .admin-table-wrap {
+  flex: 1;
+  margin-top: 0;
+}
+
+.admin-reports-table .admin-empty-state {
+  min-height: 0;
+}
+
+.admin-report-divider {
+  width: 100%;
+  height: 1px;
+  margin: 4px 0 2px;
+  background: #e5e9ed;
+}
+
+.admin-reports-empty {
+  margin-top: 0;
+  min-height: 0;
+}
+
+.admin-reports-empty span {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.admin-reports-empty.compact {
+  padding: 20px 18px;
+}
+
+.admin-reports-export {
+  align-self: stretch;
+}
+
+.admin-reports-export .report-export-panel {
+  flex: 1;
+  min-height: 0;
+  align-content: start;
+}
+
+.admin-reports-status .report-export-meta {
+  flex: 1;
+  align-content: start;
+}
+
+.report-export-meta {
+  display: grid;
+  gap: 8px;
+  margin-top: 0;
+}
+
+.report-export-meta span {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  color: #1f6049;
+  background: rgba(98, 207, 161, 0.1);
+  border: 1px solid rgba(98, 207, 161, 0.28);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .admin-table-wrap {
   overflow-x: auto;
 }
@@ -2619,6 +2760,22 @@ main {
 
 .admin-table-card td {
   font-size: 14px;
+}
+
+.admin-link-button {
+  padding: 0;
+  color: #0f172a;
+  background: transparent;
+  border: 0;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-link-button:hover {
+  color: #86efc3;
+  text-decoration: underline;
 }
 
 .admin-table-card tbody tr {
@@ -2743,7 +2900,7 @@ main {
   margin: 0;
 }
 
-.admin-config-card div {
+.admin-config-card dl > div {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2752,7 +2909,7 @@ main {
   border-bottom: 1px solid #edf1f4;
 }
 
-.admin-config-card div:last-child {
+.admin-config-card dl > div:last-child {
   border-bottom: 0;
 }
 
@@ -2795,6 +2952,64 @@ main {
   font-size: 14px;
 }
 
+.admin-sped-map-card {
+  position: relative;
+  min-height: 560px;
+}
+
+.admin-sped-map {
+  width: 100%;
+  height: 420px;
+  border: 1px solid #dbe4ec;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.admin-sped-map-overlay {
+  position: absolute;
+  inset: 76px 20px auto;
+  min-height: 420px;
+  display: grid;
+  place-items: center;
+  color: #334155;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(219, 228, 236, 0.86);
+  border-radius: 12px;
+  backdrop-filter: blur(1px);
+  pointer-events: none;
+}
+
+.admin-sped-selected {
+  margin-top: 14px;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  background: #f7fbf9;
+  border: 1px solid #d6e7de;
+  border-radius: 10px;
+}
+
+.admin-sped-selected strong {
+  color: #0f172a;
+}
+
+.admin-sped-selected span {
+  color: #475569;
+  font-size: 13px;
+}
+
+.admin-sped-selected a {
+  width: max-content;
+  color: #166a4b;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.admin-sped-selected a:hover {
+  text-decoration: underline;
+}
+
 .dictionary-categories {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -2806,6 +3021,27 @@ main {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 16px;
+}
+
+.dictionary-category-header {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.dictionary-category-header h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.dictionary-category-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .more-labels {
@@ -3115,6 +3351,14 @@ main {
   color: var(--ink);
 }
 
+:root[data-theme='dark'] .admin-link-button {
+  color: var(--ink);
+}
+
+:root[data-theme='dark'] .admin-link-button:hover {
+  color: #86efc3;
+}
+
 :root[data-theme='dark'] .admin-table-card th {
   color: #b6c4d2;
   background: var(--panel-soft);
@@ -3122,7 +3366,7 @@ main {
 
 :root[data-theme='dark'] .admin-table-card th,
 :root[data-theme='dark'] .admin-table-card td,
-:root[data-theme='dark'] .admin-config-card div {
+:root[data-theme='dark'] .admin-config-card dl > div {
   border-bottom-color: var(--line);
 }
 
@@ -3173,6 +3417,89 @@ main {
 
 :root[data-theme='dark'] .admin-action-button.danger:hover:not(:disabled) {
   background: #5b2a27;
+}
+
+:root[data-theme='dark'] .admin-empty-state {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--line);
+}
+
+:root[data-theme='dark'] .dictionary-category-block {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--line);
+}
+
+:root[data-theme='dark'] .dictionary-category-header h3 {
+  color: var(--ink);
+}
+
+:root[data-theme='dark'] .dictionary-category-header p {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .admin-sped-map {
+  border-color: var(--line);
+}
+
+:root[data-theme='dark'] .admin-sped-map-overlay {
+  color: var(--ink);
+  background: rgba(15, 23, 42, 0.62);
+  border-color: rgba(71, 85, 105, 0.7);
+}
+
+:root[data-theme='dark'] .admin-sped-selected {
+  background: rgba(110, 231, 200, 0.08);
+  border-color: rgba(110, 231, 200, 0.28);
+}
+
+:root[data-theme='dark'] .admin-sped-selected strong,
+:root[data-theme='dark'] .admin-sped-selected span,
+:root[data-theme='dark'] .admin-sped-selected a {
+  color: var(--ink);
+}
+
+:root[data-theme='dark'] .report-export-panel p {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .admin-report-divider {
+  background: var(--line);
+}
+
+:root[data-theme='dark'] .admin-reports-empty span {
+  color: var(--muted);
+}
+
+@media (max-width: 1100px) {
+  .admin-reports-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "metrics"
+      "table"
+      "distribution"
+      "config";
+    grid-template-rows: auto;
+    min-height: auto;
+  }
+
+  .admin-reports-table,
+  .admin-reports-distribution,
+  .admin-reports-export {
+    height: auto;
+  }
+}
+
+:root[data-theme='dark'] .report-export-meta span {
+  color: #c5f5e3;
+  background: rgba(110, 231, 200, 0.12);
+  border-color: rgba(110, 231, 200, 0.35);
+}
+
+:root[data-theme='dark'] .more-labels {
+  color: #d5dfeb;
+  background: rgba(148, 163, 184, 0.16);
+  border-color: rgba(148, 163, 184, 0.35);
 }
 
 :root[data-theme='dark'] .admin-footer {
@@ -3441,7 +3768,8 @@ main {
   }
 
   .admin-menu,
-  .admin-metrics {
+  .admin-metrics,
+  .admin-reports-metrics {
     grid-template-columns: 1fr;
   }
 
@@ -3451,7 +3779,7 @@ main {
   }
 
   .admin-card-heading,
-  .admin-config-card div {
+  .admin-config-card dl > div {
     align-items: flex-start;
     flex-direction: column;
   }

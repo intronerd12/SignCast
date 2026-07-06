@@ -36,6 +36,13 @@ export function AdminNavIcon({ name }) {
         <path d="M7 20a2 2 0 0 1 2-2h10" {...common} />
       </>
     ),
+    training: (
+      <>
+        <rect x="4" y="5" width="16" height="14" rx="2.5" {...common} />
+        <path d="M8 9h8M8 12h5" {...common} />
+        <path d="m16 15.5 1.5 1.5 2.5-3" {...common} />
+      </>
+    ),
     centers: (
       <>
         <path d="M4.5 20h15" {...common} />
@@ -77,7 +84,13 @@ export function AdminNavIcon({ name }) {
         <path d="M8 12h10" {...common} />
       </>
     ),
+    fallback: (
+      <>
+        <circle cx="12" cy="12" r="8" {...common} />
+        <path d="M12 8v4m0 4h.01" {...common} />
+      </>
+    ),
   }
 
-  return <svg viewBox="0 0 24 24" aria-hidden="true">{icons[name]}</svg>
+  return <svg viewBox="0 0 24 24" aria-hidden="true">{icons[name] || icons.fallback}</svg>
 }

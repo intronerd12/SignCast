@@ -18,7 +18,6 @@ export default function ProfilePage({ session, onSessionUpdated, themePreference
     recentLabels: [],
   })
   const [settings, setSettings] = useState({
-    audibleTts: true,
     audibleFeedback: true,
     language: 'Filipino Sign Language',
   })
@@ -263,10 +262,6 @@ export default function ProfilePage({ session, onSessionUpdated, themePreference
                 <option>American Sign Language</option>
                 <option>Learning Mode</option>
               </select>
-            </label>
-            <label className="toggle-row">
-              <span>Audible Feedback (TTS)</span>
-              <input type="checkbox" checked={settings.audibleTts} onChange={() => toggleSetting('audibleTts')} />
             </label>
             <label className="settings-select">
               <span>Theme</span>
