@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import PracticeCamera from './PracticeCamera.jsx'
 
 export default function SignTestRunner({ signs, title, color, onClose, onComplete }) {
@@ -7,12 +7,30 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
   const [status, setStatus] = useState('idle') // idle | correct | incorrect | gameover | finished
   const [feedback, setFeedback] = useState('')
   const [correctCount, setCorrectCount] = useState(0)
+  const [countdown, setCountdown] = useState(5)
   const cameraRef = useRef(null)
 
   const currentSign = signs[currentIndex]
   const totalSigns = signs.length
   const progress = Math.round((currentIndex / totalSigns) * 100)
   const MAX_STRIKES = 3
+
+  useEffect(() => {
+    if (status === 'idle') {
+      const timer = setInterval(() => {
+        setCountdown(prev => prev - 1)
+      }, 1000)
+      return () => clearInterval(timer)
+    } else {
+      setCountdown(5)
+    }
+  }, [status])
+
+  useEffect(() => {
+    if (countdown <= 0 && status === 'idle') {
+      handleSubmitPose()
+    }
+  }, [countdown, status])
 
   const handleSubmitPose = () => {
     if (!cameraRef.current || status !== 'idle') return
@@ -184,7 +202,7 @@ export default function SignTestRunner({ signs, title, color, onClose, onComplet
               disabled={status === 'correct' || status === 'incorrect'}
               style={{ marginTop: '16px', width: '100%', fontSize: '18px' }}
             >
-              📸 Submit Pose
+              📸 Auto-detecting in {countdown}s (Click to submit now)
             </button>
           </div>
         </div>

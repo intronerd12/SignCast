@@ -1,4 +1,7 @@
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const { exec } = require("child_process");
 const { createSupabaseAdminClient } = require("../utils/supabaseClient");
 const router = express.Router();
 
@@ -142,6 +145,117 @@ router.get("/stats", async (req, res) => {
         samplesByCategory: [],
       });
     }
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/v1/admin/pending
+// Returns a list of all unverified images in ml/data/pending
+router.get("/pending", async (req, res) => {
+  try {
+    const pendingDir = path.join(__dirname, "../../../ml/data/pending");
+    if (!fs.existsSync(pendingDir)) return res.json({ success: true, pending: [] });
+
+    const labels = fs.readdirSync(pendingDir);
+    let pendingSamples = [];
+
+    for (const label of labels) {
+      const labelDir = path.join(pendingDir, label);
+      if (fs.statSync(labelDir).isDirectory()) {
+        const files = fs.readdirSync(labelDir).filter(f => f.endsWith('.jpg'));
+        for (const file of files) {
+          const timestamp = file.split('_')[1].split('.')[0];
+          // We don't read the image content here to save bandwidth, just the metadata
+          pendingSamples.push({ label, filename: file, timestamp });
+        }
+      }
+    }
+
+    // Sort by newest first
+    pendingSamples.sort((a, b) => b.timestamp - a.timestamp);
+
+    return res.json({ success: true, pending: pendingSamples });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/v1/admin/pending/image/:label/:filename
+// Serve the pending image directly
+router.get("/pending/image/:label/:filename", (req, res) => {
+  const { label, filename } = req.params;
+  const imagePath = path.join(__dirname, "../../../ml/data/pending", label, filename);
+  if (fs.existsSync(imagePath)) {
+    return res.sendFile(imagePath);
+  }
+  return res.status(404).send("Image not found");
+});
+
+// POST /api/v1/admin/verify
+router.post("/verify", async (req, res) => {
+  try {
+    const { label, filename, approved } = req.body;
+    if (!label || !filename) return res.status(400).json({ success: false, message: "Missing label or filename" });
+
+    const pendingDir = path.join(__dirname, "../../../ml/data/pending", label);
+    const jsonFilename = filename.replace('.jpg', '.json');
+    
+    const imagePath = path.join(pendingDir, filename);
+    const jsonPath = path.join(pendingDir, jsonFilename);
+
+    if (!fs.existsSync(imagePath) || !fs.existsSync(jsonPath)) {
+      return res.status(404).json({ success: false, message: "Files not found in pending" });
+    }
+
+    if (approved) {
+      const mlDataDir = path.join(__dirname, "../../../ml/data");
+      const datasetDir = path.join(mlDataDir, "dataset", label);
+      const landmarkFile = path.join(mlDataDir, "landmark_dataset.json");
+
+      if (!fs.existsSync(datasetDir)) fs.mkdirSync(datasetDir, { recursive: true });
+
+      // Move Image
+      const existingFiles = fs.readdirSync(datasetDir).filter(f => f.endsWith('.jpg'));
+      const index = existingFiles.length;
+      const newImageFilename = `${label}_${String(index).padStart(3, '0')}.jpg`;
+      fs.renameSync(imagePath, path.join(datasetDir, newImageFilename));
+
+      // Append Features
+      const featureData = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+      let allLandmarks = [];
+      if (fs.existsSync(landmarkFile)) {
+        try { allLandmarks = JSON.parse(fs.readFileSync(landmarkFile, "utf-8")); } catch (err) {}
+      }
+      allLandmarks.push({ label: featureData.label, features: featureData.features });
+      fs.writeFileSync(landmarkFile, JSON.stringify(allLandmarks, null, 2));
+    } else {
+      // Reject: Just delete from pending
+      fs.unlinkSync(imagePath);
+    }
+    
+    // Always delete the pending JSON once processed (or if rejected)
+    if (fs.existsSync(jsonPath)) fs.unlinkSync(jsonPath);
+
+    return res.json({ success: true, message: approved ? "Approved and merged" : "Rejected and deleted" });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/v1/admin/train
+router.post("/train", async (req, res) => {
+  try {
+    const mlDir = path.join(__dirname, "../../../ml");
+    // Ensure the script is executed in the ml directory so it resolves paths correctly
+    exec("python train_landmark_model.py", { cwd: mlDir }, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Train error: ${error.message}`);
+        return res.status(500).json({ success: false, message: "Training failed", error: stderr || error.message });
+      }
+      // Return the python script output logs
+      return res.json({ success: true, output: stdout });
+    });
+  } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
 });

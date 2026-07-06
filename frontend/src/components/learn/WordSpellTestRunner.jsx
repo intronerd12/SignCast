@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import PracticeCamera from './PracticeCamera.jsx'
 
 export default function WordSpellTestRunner({ words, title, color, onClose, onComplete }) {
@@ -9,6 +9,7 @@ export default function WordSpellTestRunner({ words, title, color, onClose, onCo
   const [feedback, setFeedback] = useState('')
   const [completedLetters, setCompletedLetters] = useState([]) // indices of completed letters in current word
   const [wordsCompleted, setWordsCompleted] = useState(0)
+  const [countdown, setCountdown] = useState(5)
   const cameraRef = useRef(null)
 
   const currentWord = words[currentWordIndex]
@@ -19,6 +20,23 @@ export default function WordSpellTestRunner({ words, title, color, onClose, onCo
   const totalLetters = words.reduce((sum, w) => sum + w.letters.length, 0)
   const lettersBeforeCurrent = words.slice(0, currentWordIndex).reduce((sum, w) => sum + w.letters.length, 0)
   const progress = Math.round(((lettersBeforeCurrent + completedLetters.length) / totalLetters) * 100)
+
+  useEffect(() => {
+    if (status === 'idle') {
+      const timer = setInterval(() => {
+        setCountdown(prev => prev - 1)
+      }, 1000)
+      return () => clearInterval(timer)
+    } else {
+      setCountdown(5)
+    }
+  }, [status])
+
+  useEffect(() => {
+    if (countdown <= 0 && status === 'idle') {
+      handleSubmitPose()
+    }
+  }, [countdown, status])
 
   const handleSubmitPose = () => {
     if (!cameraRef.current || status !== 'idle') return
@@ -252,7 +270,7 @@ export default function WordSpellTestRunner({ words, title, color, onClose, onCo
               disabled={status !== 'idle'}
               style={{ marginTop: '16px', width: '100%', fontSize: '18px' }}
             >
-              📸 Submit Letter
+              📸 Auto-detecting in {countdown}s (Click to submit now)
             </button>
           </div>
         </div>
