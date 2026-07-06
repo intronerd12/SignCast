@@ -1,4 +1,6 @@
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
 const { createSupabaseAdminClient } = require("../utils/supabaseClient");
 
 const router = express.Router();
@@ -224,6 +226,62 @@ router.post("/teach", async (req, res) => {
       success: false,
       message: error.message || "Unable to store taught sign sample",
     });
+  }
+});
+
+router.post("/teach/local", async (req, res) => {
+  const label = normalizeHint(req.body?.label);
+  const features = Array.isArray(req.body?.features) ? req.body.features : null;
+  const imageBase64 = req.body?.image; // data:image/jpeg;base64,...
+  const isAdmin = req.body?.isAdmin === true;
+
+  if (!label || !features || !imageBase64) {
+    return res.status(400).json({ success: false, message: "Missing label, features, or image" });
+  }
+
+  try {
+    const mlDataDir = path.join(__dirname, "../../../ml/data");
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+
+    if (isAdmin) {
+      // Direct save to dataset for admins
+      const datasetDir = path.join(mlDataDir, "dataset", label);
+      const landmarkFile = path.join(mlDataDir, "landmark_dataset.json");
+
+      if (!fs.existsSync(datasetDir)) fs.mkdirSync(datasetDir, { recursive: true });
+
+      const existingFiles = fs.readdirSync(datasetDir).filter(f => f.endsWith('.jpg'));
+      const index = existingFiles.length;
+      const imageFilename = `${label}_${String(index).padStart(3, '0')}.jpg`;
+      fs.writeFileSync(path.join(datasetDir, imageFilename), base64Data, 'base64');
+
+      let allLandmarks = [];
+      if (fs.existsSync(landmarkFile)) {
+        try {
+          allLandmarks = JSON.parse(fs.readFileSync(landmarkFile, "utf-8"));
+        } catch (err) { }
+      }
+      allLandmarks.push({ label, features });
+      fs.writeFileSync(landmarkFile, JSON.stringify(allLandmarks, null, 2));
+
+      return res.status(201).json({ success: true, count: allLandmarks.length, status: "saved" });
+    } else {
+      // Save to pending for normal users
+      const pendingDir = path.join(mlDataDir, "pending", label);
+      if (!fs.existsSync(pendingDir)) fs.mkdirSync(pendingDir, { recursive: true });
+
+      const timestamp = Date.now();
+      const imageFilename = `${label}_${timestamp}.jpg`;
+      const jsonFilename = `${label}_${timestamp}.json`;
+
+      fs.writeFileSync(path.join(pendingDir, imageFilename), base64Data, 'base64');
+      fs.writeFileSync(path.join(pendingDir, jsonFilename), JSON.stringify({ label, features }));
+
+      return res.status(201).json({ success: true, status: "pending" });
+    }
+  } catch (error) {
+    console.error("Error saving local dataset:", error);
+    return res.status(500).json({ success: false, message: "Unable to save local dataset" });
   }
 });
 

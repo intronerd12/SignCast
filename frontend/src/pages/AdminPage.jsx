@@ -12,6 +12,10 @@ export default function AdminPage({ session, onLogout }) {
   const [isSyncing, setIsSyncing] = useState(false)
   const [lastSynced, setLastSynced] = useState(null)
   
+  const [pendingSamples, setPendingSamples] = useState([])
+  const [isTraining, setIsTraining] = useState(false)
+  const [trainingLogs, setTrainingLogs] = useState('')
+  
   // Real stats from backend
   const [stats, setStats] = useState({
     totalScores: 0,
@@ -41,6 +45,7 @@ export default function AdminPage({ session, onLogout }) {
     ['dashboard', 'dashboard', 'Dashboard'],
     ['users', 'users', 'User Accounts'],
     ['dictionary', 'dictionary', 'FSL Dictionary'],
+    ['training', 'training', 'Model Training'],
     ['centers', 'centers', 'SPED Centers'],
     ['health', 'health', 'System Health'],
     ['audit', 'audit', 'Audit Logs'],
@@ -54,11 +59,12 @@ export default function AdminPage({ session, onLogout }) {
     const startedAt = performance.now()
 
     try {
-      const [countResponse, usersResponse, statsResponse, healthResponse] = await Promise.allSettled([
+      const [countResponse, usersResponse, statsResponse, healthResponse, pendingResponse] = await Promise.allSettled([
         fetch(`${API_BASE}/users/get/count`),
         fetch(`${API_BASE}/users`),
         fetch(`${API_BASE}/admin/stats`),
         fetch(`${API_BASE}/health`),
+        fetch(`${API_BASE}/admin/pending`),
       ])
 
       // Parse user count
@@ -98,11 +104,10 @@ export default function AdminPage({ session, onLogout }) {
 
         if (healthPayload?.serverStartedAt) {
           // Calculate relative uptime
-          const start = new Date(healthPayload.serverStartedAt)
-          const diffMs = new Date() - start
-          const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-          const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
-          currentUptime = `${diffHours}h ${diffMins}m`
+          const ms = Date.now() - new Date(healthPayload.serverStartedAt).getTime()
+          const mins = Math.floor(ms / 60000)
+          const hrs = Math.floor(mins / 60)
+          currentUptime = `${hrs}h ${mins % 60}m`
         } else if (healthPayload?.status === 'ok') {
           currentUptime = 'Online'
         }
@@ -115,12 +120,60 @@ export default function AdminPage({ session, onLogout }) {
         latency: `${latencyMs}ms`
       })
 
+      // Parse pending samples
+      if (pendingResponse?.status === 'fulfilled' && pendingResponse.value.ok) {
+        const pendingData = await pendingResponse.value.json()
+        if (pendingData?.success) {
+          setPendingSamples(pendingData.pending || [])
+        }
+      }
+
       setLastSynced(new Date())
       setAdminStatus('Live system data synced')
     } catch (error) {
       setAdminStatus(error.message || 'Error fetching admin data')
     } finally {
       setIsSyncing(false)
+    }
+  }
+
+  const verifySample = async (sample, approved) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: sample.label, filename: sample.filename, approved })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setPendingSamples(current => current.filter(s => s.filename !== sample.filename))
+        setActionStatus({ type: 'success', message: `${sample.label} ${approved ? 'approved' : 'rejected'}.` })
+      } else {
+        throw new Error(data.message)
+      }
+    } catch (err) {
+      setActionStatus({ type: 'error', message: err.message || 'Verification failed.' })
+    }
+  }
+
+  const trainModel = async () => {
+    setIsTraining(true)
+    setTrainingLogs('Starting model training...\n')
+    setActionStatus({ type: '', message: 'Training model...' })
+    try {
+      const res = await fetch(`${API_BASE}/admin/train`, { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        setTrainingLogs(prev => prev + data.output)
+        setActionStatus({ type: 'success', message: 'Model trained successfully!' })
+      } else {
+        throw new Error(data.error || data.message || 'Training failed.')
+      }
+    } catch (err) {
+      setTrainingLogs(prev => prev + `\nError: ${err.message}`)
+      setActionStatus({ type: 'error', message: 'Model training failed.' })
+    } finally {
+      setIsTraining(false)
     }
   }
 
@@ -368,6 +421,7 @@ export default function AdminPage({ session, onLogout }) {
                 <th>User Identity</th>
                 <th>Role</th>
                 <th>Status</th>
+                <th>Strikes</th>
                 <th>Registered At</th>
                 <th>Actions</th>
               </tr>
@@ -377,19 +431,26 @@ export default function AdminPage({ session, onLogout }) {
                 const isSelf = user.id === session?.userId
                 const isBusy = mutatingUserId === user.id
                 const isActive = user.isActive !== false
+                const isLocked = user.camera_lock_until && user.camera_lock_until > Date.now()
+                const strikes = user.vulgarity_strikes || 0
 
                 return (
                   <tr key={user.id}>
                     <td>
-                      <strong>{user.name || 'Anonymous'}</strong>
+                      <strong>{user.name || 'Anonymous'} {strikes > 0 && <span title={`${strikes} vulgarity strikes`} style={{fontSize: '12px', cursor: 'help'}}>🚩</span>}</strong>
                       <div style={{fontSize: '12px', color: '#6b7280'}}>{user.email}</div>
                     </td>
                     <td>{user.isAdmin ? 'Admin' : 'Student'}</td>
                     <td>
-                      <span className={!isActive ? 'admin-status-badge inactive' : user.isAdmin ? 'admin-status-badge admin' : 'admin-status-badge'}>
-                        {!isActive ? 'Inactive' : user.isAdmin ? 'Privileged' : 'Active'}
-                      </span>
+                      {isLocked ? (
+                        <span className="admin-status-badge inactive" title={`Locked until ${new Date(user.camera_lock_until).toLocaleTimeString()}`}>Locked Out</span>
+                      ) : (
+                        <span className={!isActive ? 'admin-status-badge inactive' : user.isAdmin ? 'admin-status-badge admin' : 'admin-status-badge'}>
+                          {!isActive ? 'Inactive' : user.isAdmin ? 'Privileged' : 'Active'}
+                        </span>
+                      )}
                     </td>
+                    <td style={{textAlign: 'center', color: strikes > 0 ? '#ef4444' : 'inherit'}}>{strikes}</td>
                     <td>{formatAdminDate(user.createdAt)}</td>
                     <td>
                       <div className="admin-action-group">
@@ -459,6 +520,85 @@ export default function AdminPage({ session, onLogout }) {
             ))}
           </div>
         )}
+      </section>
+    </div>
+  )
+
+  const renderTraining = () => (
+    <div className="admin-content-grid" style={{ gridTemplateColumns: '1fr', gridTemplateAreas: '"verify" "train"' }}>
+      <section className="admin-table-card" style={{gridArea: 'verify'}}>
+        <div className="admin-card-heading">
+          <p className="eyebrow">Pending Dataset Verification</p>
+          <span>Review user submissions before adding to live dataset</span>
+        </div>
+        
+        {pendingSamples.length === 0 ? (
+          <div className="admin-empty-state">
+            <p>No pending samples require verification.</p>
+          </div>
+        ) : (
+          <div className="admin-table-wrap" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Image</th>
+                  <th>Proposed Label</th>
+                  <th>Submitted</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingSamples.map((sample) => (
+                  <tr key={sample.filename}>
+                    <td>
+                      <img 
+                        src={`${API_BASE}/admin/pending/image/${sample.label}/${sample.filename}`} 
+                        alt="Pending" 
+                        style={{width: '60px', height: '60px', objectFit: 'cover', borderRadius: '4px'}} 
+                        loading="lazy"
+                      />
+                    </td>
+                    <td><strong>{sample.label}</strong></td>
+                    <td>{new Date(parseInt(sample.timestamp)).toLocaleString()}</td>
+                    <td>
+                      <div className="admin-action-group">
+                        <button className="admin-action-button success" onClick={() => verifySample(sample, true)}>✅ Approve</button>
+                        <button className="admin-action-button danger" onClick={() => verifySample(sample, false)}>❌ Reject</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="admin-table-card" style={{gridArea: 'train'}}>
+         <div className="admin-card-heading">
+          <p className="eyebrow">AI Model Training Engine</p>
+          <span>Retrain the Landmark Recognition model with the verified dataset</span>
+        </div>
+        <div style={{ padding: '20px' }}>
+          <p style={{ marginBottom: '16px', color: 'var(--muted)' }}>
+            After approving new signs above, click the button below to execute the Python ML training script. 
+            This will rebuild the underlying TensorFlow/Scikit-Learn models and deploy them to the frontend instantly.
+          </p>
+          <button 
+            className="admin-action-button success" 
+            style={{ padding: '10px 20px', fontSize: '16px', backgroundColor: '#3b82f6', color: 'white' }}
+            onClick={trainModel}
+            disabled={isTraining}
+          >
+            {isTraining ? '🚀 Training in Progress...' : '🚀 Train AI Model'}
+          </button>
+
+          {trainingLogs && (
+            <div style={{ marginTop: '20px', backgroundColor: '#1e1e1e', color: '#0f0', padding: '15px', borderRadius: '8px', fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: '300px', overflowY: 'auto' }}>
+              {trainingLogs}
+            </div>
+          )}
+        </div>
       </section>
     </div>
   )
@@ -677,10 +817,11 @@ export default function AdminPage({ session, onLogout }) {
           </a>
         </header>
 
-        <div className="admin-content-grid" style={activeSection !== 'dashboard' && activeSection !== 'reports' && activeSection !== 'dictionary' ? { gridTemplateColumns: '1fr', gridTemplateAreas: '"table"' } : {}}>
+        <div className="admin-content-grid" style={activeSection !== 'dashboard' && activeSection !== 'reports' && activeSection !== 'dictionary' && activeSection !== 'training' ? { gridTemplateColumns: '1fr', gridTemplateAreas: '"table"' } : {}}>
           {activeSection === 'dashboard' && renderDashboard()}
           {activeSection === 'users' && renderUsers()}
           {activeSection === 'dictionary' && renderDictionary()}
+          {activeSection === 'training' && renderTraining()}
           {activeSection === 'reports' && renderReports()}
           {activeSection === 'audit' && renderAuditLogs()}
           {activeSection === 'centers' && renderPlaceholder('SPED Centers Module')}

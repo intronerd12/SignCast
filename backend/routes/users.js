@@ -179,9 +179,28 @@ const formatUser = (u) => ({
 router.get("/", async (req, res) => {
   try {
     const supabase = createSupabaseAdminClient();
-    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 100 });
-    if (error) return res.status(400).json({ success: false, message: error.message });
-    return res.json((data?.users || []).map(formatUser));
+    const { data: authData, error: authError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 100 });
+    if (authError) return res.status(400).json({ success: false, message: authError.message });
+    
+    // Fetch user profiles to get metadata (like vulgarity strikes)
+    const { data: profilesData } = await supabase
+      .from("user_profiles")
+      .select("id, metadata");
+      
+    const profileMap = {};
+    if (profilesData) {
+      profilesData.forEach(p => { profileMap[p.id] = p.metadata || {} });
+    }
+
+    const mergedUsers = (authData?.users || []).map(u => {
+      const formatted = formatUser(u);
+      const meta = profileMap[u.id] || {};
+      formatted.vulgarity_strikes = meta.vulgarity_strikes || 0;
+      formatted.camera_lock_until = meta.camera_lock_until || 0;
+      return formatted;
+    });
+
+    return res.json(mergedUsers);
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -528,6 +547,79 @@ router.put("/:id/push-token", async (req, res) => {
       success: true,
       pushToken: pushToken || "",
       message: pushToken ? "Token updated" : "Token removed",
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+// POST /api/v1/users/:id/vulgarity-strike
+// Increment vulgarity strikes and lock the camera
+router.post("/:id/vulgarity-strike", async (req, res) => {
+  try {
+    const supabase = createSupabaseAdminClient();
+    
+    // Fetch current user metadata
+    const { data: profileData, error: profileErr } = await supabase
+      .from("user_profiles")
+      .select("metadata")
+      .eq("id", req.params.id)
+      .single();
+
+    if (profileErr) throw profileErr;
+
+    const existingMeta = profileData?.metadata || {};
+    const strikes = (existingMeta.vulgarity_strikes || 0) + 1;
+
+    // Calculate penalty duration in minutes
+    // 1st offense = 1m, 2nd = 5m, 3rd = 10m, 4th = 20m, 5th = 30m, etc.
+    let durationMins = 1;
+    if (strikes === 2) durationMins = 5;
+    else if (strikes === 3) durationMins = 10;
+    else if (strikes > 3) durationMins = 10 + ((strikes - 3) * 10);
+
+    const lockUntil = Date.now() + (durationMins * 60 * 1000);
+
+    const newMeta = {
+      ...existingMeta,
+      vulgarity_strikes: strikes,
+      camera_lock_until: lockUntil,
+    };
+
+    const { error: updateErr } = await supabase
+      .from("user_profiles")
+      .update({ metadata: newMeta })
+      .eq("id", req.params.id);
+
+    if (updateErr) throw updateErr;
+
+    return res.json({
+      success: true,
+      strikes,
+      camera_lock_until: lockUntil,
+      message: `Camera locked for ${durationMins} minutes.`,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+// GET /api/v1/users/:id/vulgarity-status
+// Returns the user's strikes and camera lock status
+router.get("/:id/vulgarity-status", async (req, res) => {
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { data: profileData, error: profileErr } = await supabase
+      .from("user_profiles")
+      .select("metadata")
+      .eq("id", req.params.id)
+      .single();
+
+    if (profileErr) throw profileErr;
+
+    const existingMeta = profileData?.metadata || {};
+    return res.json({
+      success: true,
+      strikes: existingMeta.vulgarity_strikes || 0,
+      camera_lock_until: existingMeta.camera_lock_until || 0,
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
