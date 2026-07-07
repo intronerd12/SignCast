@@ -2637,9 +2637,9 @@ main {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
     "metrics metrics"
-    "table config"
+    "table table"
     "distribution config";
-  grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
   align-items: stretch;
   align-content: stretch;
   min-height: calc(100vh - 208px);
@@ -2706,6 +2706,24 @@ main {
   flex: 1;
   min-height: 0;
   align-content: start;
+}
+
+.admin-reports-grid .admin-table-card th,
+.admin-reports-grid .admin-table-card td {
+  white-space: normal;
+  vertical-align: top;
+}
+
+.admin-payload-cell {
+  max-width: 340px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.admin-reports-grid .admin-reports-export {
+  position: static;
+  top: auto;
+  height: fit-content;
 }
 
 .admin-reports-status .report-export-meta {
@@ -3487,6 +3505,10 @@ main {
   .admin-reports-distribution,
   .admin-reports-export {
     height: auto;
+  }
+
+  .admin-reports-grid .admin-reports-export {
+    position: static;
   }
 }
 

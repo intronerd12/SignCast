@@ -36,6 +36,8 @@ export default function AdminPage({ session, onLogout }) {
     scoresByType: [],
     dailyScores: [],
     topScorers: [],
+    userTestPerformance: [],
+    userModelContributions: [],
     recentEvents: [],
     samplesByCategory: []
   })
@@ -388,6 +390,12 @@ export default function AdminPage({ session, onLogout }) {
     return `"${text.replace(/"/g, '""')}"`
   }
 
+  const formatTestTypeLabel = (value) => (value || 'unknown').toString().replace(/-/g, ' ')
+  const formatAuditPayloadRef = (payload) => {
+    const text = typeof payload === 'string' ? payload : JSON.stringify(payload || {})
+    return text.length > 90 ? `${text.slice(0, 87)}...` : text
+  }
+
   const downloadFile = (blob, filename) => {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -443,6 +451,105 @@ export default function AdminPage({ session, onLogout }) {
         ])
       })
     }
+    rows.push([])
+
+    rows.push(['All User Test Records'])
+    rows.push(['Rank', 'Name', 'Email', 'Attempts', 'Average Score', 'Highest Score', 'Highest Test Type', 'Last Test'])
+    if ((stats.userTestPerformance || []).length === 0) {
+      rows.push(['-', 'No records', '', '', '', '', '', ''])
+    } else {
+      stats.userTestPerformance.forEach((item, index) => {
+        rows.push([
+          index + 1,
+          item.name || 'Anonymous',
+          item.email || '',
+          item.attempts || 0,
+          item.averageScore || 0,
+          item.highestScore || 0,
+          formatTestTypeLabel(item.highestScoreType),
+          item.lastTestAt || '',
+        ])
+      })
+    }
+    rows.push([])
+
+    rows.push(['User Model Training Contributions'])
+    rows.push(['Rank', 'Name', 'Email', 'Total Samples', 'Verified Samples', 'Pending Samples', 'Unique Labels', 'Last Contribution'])
+    if ((stats.userModelContributions || []).length === 0) {
+      rows.push(['-', 'No records', '', '', '', '', '', ''])
+    } else {
+      stats.userModelContributions.forEach((item, index) => {
+        rows.push([
+          index + 1,
+          item.name || 'Anonymous',
+          item.email || '',
+          item.totalSamples || 0,
+          item.verifiedSamples || 0,
+          item.unverifiedSamples || 0,
+          item.uniqueLabels || 0,
+          item.lastSampleAt || '',
+        ])
+      })
+    }
+    rows.push([])
+
+    rows.push(['Daily Test Activity Records'])
+    rows.push(['Date', 'Average Score', 'Attempts'])
+    if ((stats.dailyScores || []).length === 0) {
+      rows.push(['No data', 0, 0])
+    } else {
+      stats.dailyScores.forEach((item) => {
+        rows.push([item.date || '', item.avg || 0, item.count || 0])
+      })
+    }
+    rows.push([])
+
+    rows.push(['Dataset Category Records'])
+    rows.push(['Category', 'Total Samples', 'Unique Labels', 'Label Preview'])
+    if ((stats.samplesByCategory || []).length === 0) {
+      rows.push(['No data', 0, 0, ''])
+    } else {
+      stats.samplesByCategory.forEach((item) => {
+        rows.push([
+          item.category || 'uncategorized',
+          item.count || 0,
+          item.uniqueLabels || 0,
+          (item.labels || []).join(', '),
+        ])
+      })
+    }
+    rows.push([])
+
+    rows.push(['User Account Records'])
+    rows.push(['Name', 'Email', 'Role', 'Status'])
+    if ((users || []).length === 0) {
+      rows.push(['No users found', '', '', ''])
+    } else {
+      users.forEach((user) => {
+        rows.push([
+          user.name || 'Anonymous',
+          user.email || '',
+          user.isAdmin ? 'Admin' : 'User',
+          user.isActive === false ? 'Inactive' : 'Active',
+        ])
+      })
+    }
+    rows.push([])
+
+    rows.push(['Recent Audit Event Records'])
+    rows.push(['Timestamp', 'Category', 'Action', 'Payload Reference'])
+    if ((stats.recentEvents || []).length === 0) {
+      rows.push(['No records', '', '', ''])
+    } else {
+      stats.recentEvents.forEach((event) => {
+        rows.push([
+          event.created_at || '',
+          event.category || '',
+          event.action || '',
+          formatAuditPayloadRef(event.payload),
+        ])
+      })
+    }
 
     const csv = rows
       .map((row) => row.map(sanitizeCsvValue).join(','))
@@ -462,6 +569,23 @@ export default function AdminPage({ session, onLogout }) {
       const margin = 30
       const contentWidth = pageWidth - margin * 2
       const generatedAt = new Date()
+      const bottomReserved = 62
+      const sectionTitleHeight = 24
+      const ensureSectionStart = (preferredY) => {
+        if (preferredY + sectionTitleHeight > pageHeight - bottomReserved) {
+          doc.addPage()
+          return margin + 30
+        }
+        return preferredY
+      }
+      const drawSectionTitle = (title, atY) => {
+        const y = ensureSectionStart(atY)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(15, 23, 42)
+        doc.setFontSize(12)
+        doc.text(title, margin, y)
+        return y + 8
+      }
 
       // Outer page border
       doc.setDrawColor(207, 217, 228)
@@ -487,13 +611,16 @@ export default function AdminPage({ session, onLogout }) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(11)
       doc.text('Admin Performance Report', margin + 80, margin + 58)
+      doc.setFontSize(10)
+      doc.text('Coverage: System metrics, learner testing outcomes, and user model-training contributions', margin + 80, margin + 74)
 
       doc.setFontSize(9)
       doc.text(`Generated: ${generatedAt.toLocaleString()}`, pageWidth - margin - 14, margin + 36, { align: 'right' })
       doc.text(`Prepared by: ${adminName || session?.email || 'Administrator'}`, pageWidth - margin - 14, margin + 54, { align: 'right' })
+      doc.text(`Scope: All users`, pageWidth - margin - 14, margin + 72, { align: 'right' })
 
       // Summary cards
-      const summaryTop = margin + 100
+      const summaryTop = margin + 108
       const summaryGap = 10
       const summaryCardWidth = (contentWidth - summaryGap * 3) / 4
       const summaryCardHeight = 74
@@ -520,13 +647,10 @@ export default function AdminPage({ session, onLogout }) {
       })
 
       const reportBodyY = summaryTop + summaryCardHeight + 24
-      doc.setFont('helvetica', 'bold')
-      doc.setTextColor(15, 23, 42)
-      doc.setFontSize(12)
-      doc.text('Scores by Test Type', margin, reportBodyY)
+      const typeTableTitleY = drawSectionTitle('Scores by Test Type', reportBodyY)
 
       autoTable(doc, {
-        startY: reportBodyY + 8,
+        startY: typeTableTitleY,
         margin: { left: margin, right: margin },
         styles: {
           font: 'helvetica',
@@ -544,7 +668,7 @@ export default function AdminPage({ session, onLogout }) {
         },
         body: (stats.scoresByType || []).length > 0
           ? stats.scoresByType.map((item) => [
-              (item.type || 'unknown').toString().replace(/-/g, ' '),
+              formatTestTypeLabel(item.type),
               Number(item.count || 0).toLocaleString(),
             ])
           : [['No data available', '0']],
@@ -553,13 +677,10 @@ export default function AdminPage({ session, onLogout }) {
         tableLineWidth: 0.8,
       })
 
-      const nextY = doc.lastAutoTable.finalY + 18
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(12)
-      doc.text('Top Scorers Leaderboard', margin, nextY)
+      const nextY = drawSectionTitle('Top Scorers Leaderboard', doc.lastAutoTable.finalY + 18)
 
       autoTable(doc, {
-        startY: nextY + 8,
+        startY: nextY,
         margin: { left: margin, right: margin },
         styles: {
           font: 'helvetica',
@@ -581,10 +702,203 @@ export default function AdminPage({ session, onLogout }) {
               scorer.name || 'Anonymous',
               scorer.email || 'N/A',
               `${Number(scorer.score || 0).toLocaleString()} pts`,
-              (scorer.test_type || 'n/a').toString(),
+              formatTestTypeLabel(scorer.test_type),
             ])
           : [['-', 'No records available', '', '', '']],
         head: [['Rank', 'User', 'Email', 'Highest Score', 'Test Type']],
+        tableLineColor: [180, 214, 198],
+        tableLineWidth: 0.8,
+      })
+
+      const userScoresTitleY = drawSectionTitle('All User Test Records', doc.lastAutoTable.finalY + 18)
+      autoTable(doc, {
+        startY: userScoresTitleY,
+        margin: { left: margin, right: margin },
+        styles: {
+          font: 'helvetica',
+          fontSize: 8.5,
+          cellPadding: 5,
+          lineColor: [220, 228, 236],
+          lineWidth: 0.6,
+          textColor: [17, 24, 39],
+        },
+        headStyles: {
+          fillColor: [232, 245, 238],
+          textColor: [12, 53, 41],
+          fontStyle: 'bold',
+          lineColor: [180, 214, 198],
+        },
+        body: (stats.userTestPerformance || []).length > 0
+          ? stats.userTestPerformance.map((item, index) => [
+              String(index + 1),
+              item.name || 'Anonymous',
+              item.email || 'N/A',
+              Number(item.attempts || 0).toLocaleString(),
+              Number(item.averageScore || 0).toLocaleString(),
+              Number(item.highestScore || 0).toLocaleString(),
+              formatTestTypeLabel(item.highestScoreType),
+              item.lastTestAt ? new Date(item.lastTestAt).toLocaleDateString() : 'N/A',
+            ])
+          : [['-', 'No records available', '', '', '', '', '', '']],
+        head: [['Rank', 'User', 'Email', 'Attempts', 'Avg', 'High', 'Best Test', 'Last Test']],
+        tableLineColor: [180, 214, 198],
+        tableLineWidth: 0.8,
+      })
+
+      const modelContribTitleY = drawSectionTitle('User Model-Training Contributions', doc.lastAutoTable.finalY + 18)
+      autoTable(doc, {
+        startY: modelContribTitleY,
+        margin: { left: margin, right: margin },
+        styles: {
+          font: 'helvetica',
+          fontSize: 8.5,
+          cellPadding: 5,
+          lineColor: [220, 228, 236],
+          lineWidth: 0.6,
+          textColor: [17, 24, 39],
+        },
+        headStyles: {
+          fillColor: [232, 245, 238],
+          textColor: [12, 53, 41],
+          fontStyle: 'bold',
+          lineColor: [180, 214, 198],
+        },
+        body: (stats.userModelContributions || []).length > 0
+          ? stats.userModelContributions.map((item, index) => [
+              String(index + 1),
+              item.name || 'Anonymous',
+              item.email || 'N/A',
+              Number(item.totalSamples || 0).toLocaleString(),
+              Number(item.verifiedSamples || 0).toLocaleString(),
+              Number(item.unverifiedSamples || 0).toLocaleString(),
+              Number(item.uniqueLabels || 0).toLocaleString(),
+              item.lastSampleAt ? new Date(item.lastSampleAt).toLocaleDateString() : 'N/A',
+            ])
+          : [['-', 'No records available', '', '', '', '', '', '']],
+        head: [['Rank', 'User', 'Email', 'Samples', 'Verified', 'Pending', 'Labels', 'Last Upload']],
+        tableLineColor: [180, 214, 198],
+        tableLineWidth: 0.8,
+      })
+
+      const dailyRecordsTitleY = drawSectionTitle('Daily Test Activity Records', doc.lastAutoTable.finalY + 18)
+      autoTable(doc, {
+        startY: dailyRecordsTitleY,
+        margin: { left: margin, right: margin },
+        styles: {
+          font: 'helvetica',
+          fontSize: 9,
+          cellPadding: 5,
+          lineColor: [220, 228, 236],
+          lineWidth: 0.6,
+          textColor: [17, 24, 39],
+        },
+        headStyles: {
+          fillColor: [232, 245, 238],
+          textColor: [12, 53, 41],
+          fontStyle: 'bold',
+          lineColor: [180, 214, 198],
+        },
+        body: (stats.dailyScores || []).length > 0
+          ? stats.dailyScores.map((item) => [
+              item.date || '',
+              `${Number(item.avg || 0).toLocaleString()} pts`,
+              Number(item.count || 0).toLocaleString(),
+            ])
+          : [['No data available', '0 pts', '0']],
+        head: [['Date', 'Average Score', 'Attempts']],
+        tableLineColor: [180, 214, 198],
+        tableLineWidth: 0.8,
+      })
+
+      const sampleCategoryTitleY = drawSectionTitle('Dataset Category Records', doc.lastAutoTable.finalY + 18)
+      autoTable(doc, {
+        startY: sampleCategoryTitleY,
+        margin: { left: margin, right: margin },
+        styles: {
+          font: 'helvetica',
+          fontSize: 8.5,
+          cellPadding: 5,
+          lineColor: [220, 228, 236],
+          lineWidth: 0.6,
+          textColor: [17, 24, 39],
+        },
+        headStyles: {
+          fillColor: [232, 245, 238],
+          textColor: [12, 53, 41],
+          fontStyle: 'bold',
+          lineColor: [180, 214, 198],
+        },
+        body: (stats.samplesByCategory || []).length > 0
+          ? stats.samplesByCategory.map((item) => [
+              item.category || 'uncategorized',
+              Number(item.count || 0).toLocaleString(),
+              Number(item.uniqueLabels || 0).toLocaleString(),
+              ((item.labels || []).slice(0, 6)).join(', '),
+            ])
+          : [['No data available', '0', '0', '']],
+        head: [['Category', 'Samples', 'Unique Labels', 'Label Preview']],
+        tableLineColor: [180, 214, 198],
+        tableLineWidth: 0.8,
+      })
+
+      const accountRecordsTitleY = drawSectionTitle('User Account Records', doc.lastAutoTable.finalY + 18)
+      autoTable(doc, {
+        startY: accountRecordsTitleY,
+        margin: { left: margin, right: margin },
+        styles: {
+          font: 'helvetica',
+          fontSize: 8.5,
+          cellPadding: 5,
+          lineColor: [220, 228, 236],
+          lineWidth: 0.6,
+          textColor: [17, 24, 39],
+        },
+        headStyles: {
+          fillColor: [232, 245, 238],
+          textColor: [12, 53, 41],
+          fontStyle: 'bold',
+          lineColor: [180, 214, 198],
+        },
+        body: (users || []).length > 0
+          ? users.map((user) => [
+              user.name || 'Anonymous',
+              user.email || 'N/A',
+              user.isAdmin ? 'Admin' : 'User',
+              user.isActive === false ? 'Inactive' : 'Active',
+            ])
+          : [['No users found', '', '', '']],
+        head: [['Name', 'Email', 'Role', 'Status']],
+        tableLineColor: [180, 214, 198],
+        tableLineWidth: 0.8,
+      })
+
+      const auditRecordsTitleY = drawSectionTitle('Recent Audit Event Records', doc.lastAutoTable.finalY + 18)
+      autoTable(doc, {
+        startY: auditRecordsTitleY,
+        margin: { left: margin, right: margin },
+        styles: {
+          font: 'helvetica',
+          fontSize: 8,
+          cellPadding: 4.5,
+          lineColor: [220, 228, 236],
+          lineWidth: 0.6,
+          textColor: [17, 24, 39],
+        },
+        headStyles: {
+          fillColor: [232, 245, 238],
+          textColor: [12, 53, 41],
+          fontStyle: 'bold',
+          lineColor: [180, 214, 198],
+        },
+        body: (stats.recentEvents || []).length > 0
+          ? stats.recentEvents.map((event) => [
+              event.created_at ? new Date(event.created_at).toLocaleString() : 'N/A',
+              event.category || '',
+              event.action || '',
+              formatAuditPayloadRef(event.payload),
+            ])
+          : [['No records available', '', '', '']],
+        head: [['Timestamp', 'Category', 'Action', 'Payload Reference']],
         tableLineColor: [180, 214, 198],
         tableLineWidth: 0.8,
       })
@@ -1183,6 +1497,232 @@ export default function AdminPage({ session, onLogout }) {
         )}
       </section>
 
+      <section className="admin-table-card" style={{ gridColumn: '1 / -1' }}>
+        <div className="admin-card-heading">
+          <p className="eyebrow">All User Test Records</p>
+          <span>Complete score history summary per user</span>
+        </div>
+        {stats.userTestPerformance.length === 0 ? (
+          <div className="admin-empty-state admin-reports-empty compact">
+            <p>No per-user score data available yet.</p>
+          </div>
+        ) : (
+          <div className="admin-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>User</th>
+                  <th>Attempts</th>
+                  <th>Average</th>
+                  <th>Highest</th>
+                  <th>Best Test Type</th>
+                  <th>Last Test</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.userTestPerformance.map((item, index) => (
+                  <tr key={item.user_id}>
+                    <td><strong>{index + 1}</strong></td>
+                    <td>
+                      <strong>{item.name || 'Anonymous'}</strong>
+                      <div style={{ fontSize: '12px', color: '#6b7280' }}>{item.email || 'Unknown'}</div>
+                    </td>
+                    <td>{item.attempts}</td>
+                    <td><strong>{item.averageScore} pts</strong></td>
+                    <td><strong>{item.highestScore} pts</strong></td>
+                    <td style={{ textTransform: 'capitalize' }}>{formatTestTypeLabel(item.highestScoreType)}</td>
+                    <td>{formatAdminDate(item.lastTestAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="admin-table-card" style={{ gridColumn: '1 / -1' }}>
+        <div className="admin-card-heading">
+          <p className="eyebrow">User-Trained Model Contributions</p>
+          <span>Samples uploaded by users that feed model retraining</span>
+        </div>
+        {stats.userModelContributions.length === 0 ? (
+          <div className="admin-empty-state admin-reports-empty compact">
+            <p>No training contribution data available yet.</p>
+          </div>
+        ) : (
+          <div className="admin-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>User</th>
+                  <th>Total Samples</th>
+                  <th>Verified</th>
+                  <th>Pending</th>
+                  <th>Unique Labels</th>
+                  <th>Last Upload</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.userModelContributions.map((item, index) => (
+                  <tr key={item.user_id}>
+                    <td><strong>{index + 1}</strong></td>
+                    <td>
+                      <strong>{item.name || 'Anonymous'}</strong>
+                      <div style={{ fontSize: '12px', color: '#6b7280' }}>{item.email || 'Unknown'}</div>
+                    </td>
+                    <td>{item.totalSamples}</td>
+                    <td><strong>{item.verifiedSamples}</strong></td>
+                    <td>{item.unverifiedSamples}</td>
+                    <td>{item.uniqueLabels}</td>
+                    <td>{formatAdminDate(item.lastSampleAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="admin-table-card" style={{ gridColumn: '1 / -1' }}>
+        <div className="admin-card-heading">
+          <p className="eyebrow">Daily Test Activity Records</p>
+          <span>Day-by-day scoring activity used in report exports</span>
+        </div>
+        {stats.dailyScores.length === 0 ? (
+          <div className="admin-empty-state admin-reports-empty compact">
+            <p>No daily activity records available yet.</p>
+          </div>
+        ) : (
+          <div className="admin-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Average Score</th>
+                  <th>Attempts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.dailyScores.map((item) => (
+                  <tr key={item.date}>
+                    <td>{item.date}</td>
+                    <td><strong>{item.avg} pts</strong></td>
+                    <td>{item.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="admin-table-card" style={{ gridColumn: '1 / -1' }}>
+        <div className="admin-card-heading">
+          <p className="eyebrow">Dataset Category Records</p>
+          <span>Model training dataset distribution by category</span>
+        </div>
+        {stats.samplesByCategory.length === 0 ? (
+          <div className="admin-empty-state admin-reports-empty compact">
+            <p>No category records available yet.</p>
+          </div>
+        ) : (
+          <div className="admin-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Total Samples</th>
+                  <th>Unique Labels</th>
+                  <th>Label Preview</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.samplesByCategory.map((item) => (
+                  <tr key={item.category}>
+                    <td style={{ textTransform: 'capitalize' }}>{item.category || 'uncategorized'}</td>
+                    <td>{item.count}</td>
+                    <td>{item.uniqueLabels}</td>
+                    <td>{(item.labels || []).slice(0, 6).join(', ')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="admin-table-card" style={{ gridColumn: '1 / -1' }}>
+        <div className="admin-card-heading">
+          <p className="eyebrow">User Account Records</p>
+          <span>Current account roster included in PDF and CSV exports</span>
+        </div>
+        {users.length === 0 ? (
+          <div className="admin-empty-state admin-reports-empty compact">
+            <p>No user accounts found.</p>
+          </div>
+        ) : (
+          <div className="admin-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td><strong>{user.name || 'Anonymous'}</strong></td>
+                    <td>{user.email || 'N/A'}</td>
+                    <td>{user.isAdmin ? 'Admin' : 'User'}</td>
+                    <td>{user.isActive === false ? 'Inactive' : 'Active'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="admin-table-card" style={{ gridColumn: '1 / -1' }}>
+        <div className="admin-card-heading">
+          <p className="eyebrow">Recent Audit Event Records</p>
+          <span>Latest system events included in exports</span>
+        </div>
+        {stats.recentEvents.length === 0 ? (
+          <div className="admin-empty-state admin-reports-empty compact">
+            <p>No audit event records available yet.</p>
+          </div>
+        ) : (
+          <div className="admin-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Category</th>
+                  <th>Action</th>
+                  <th>Payload Reference</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.recentEvents.map((event) => (
+                  <tr key={event.id}>
+                    <td>{formatAdminDate(event.created_at)}</td>
+                    <td>{event.category}</td>
+                    <td>{event.action}</td>
+                    <td className="admin-payload-cell">{formatAuditPayloadRef(event.payload)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <aside className="admin-config-card admin-reports-export" style={{gridArea: 'config'}}>
         <div className="admin-card-heading">
            <p className="eyebrow">Report Export Options</p>
@@ -1234,8 +1774,8 @@ export default function AdminPage({ session, onLogout }) {
                   <td>{formatAdminDate(event.created_at)}</td>
                   <td><span className="admin-status-badge">{event.category}</span></td>
                   <td><strong>{event.action}</strong></td>
-                  <td style={{fontFamily: 'monospace', fontSize: '12px', color: '#6b7280'}}>
-                     {JSON.stringify(event.payload).substring(0, 40)}...
+                <td className="admin-payload-cell" style={{fontFamily: 'monospace', fontSize: '12px', color: '#6b7280'}}>
+                   {formatAuditPayloadRef(event.payload)}
                   </td>
                 </tr>
               ))}

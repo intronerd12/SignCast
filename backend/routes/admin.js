@@ -18,11 +18,16 @@ router.get("/stats", async (req, res) => {
       scoresByType: [],
       dailyScores: [],
       topScorers: [],
+      userTestPerformance: [],
+      userModelContributions: [],
       recentEvents: [],
       samplesByCategory: [],
     };
 
-    // 1. Total scores count + breakdown by type
+    const userProfileMap = new Map();
+    const userIds = new Set();
+
+    // 1. Total scores count + score analytics
     const { data: scoresData, error: scoresErr } = await supabase
       .from("fsl_scores")
       .select("id, score, test_type, created_at, user_id");
@@ -30,15 +35,43 @@ router.get("/stats", async (req, res) => {
     if (!scoresErr && scoresData) {
       stats.totalScores = scoresData.length;
 
-      // Scores by test type
       const typeMap = {};
+      const userScoreMap = {};
       scoresData.forEach((s) => {
         const t = s.test_type || "alphabet";
         typeMap[t] = (typeMap[t] || 0) + 1;
+
+        if (!s.user_id) return;
+        userIds.add(s.user_id);
+        if (!userScoreMap[s.user_id]) {
+          userScoreMap[s.user_id] = {
+            user_id: s.user_id,
+            attempts: 0,
+            totalScore: 0,
+            highestScore: Number.NEGATIVE_INFINITY,
+            highestScoreType: "n/a",
+            lastTestAt: null,
+            testTypes: new Set(),
+          };
+        }
+
+        const entry = userScoreMap[s.user_id];
+        const scoreValue = Number(s.score || 0);
+        entry.attempts += 1;
+        entry.totalScore += scoreValue;
+        entry.testTypes.add(t);
+
+        if (scoreValue > entry.highestScore) {
+          entry.highestScore = scoreValue;
+          entry.highestScoreType = t;
+        }
+
+        if (!entry.lastTestAt || new Date(s.created_at) > new Date(entry.lastTestAt)) {
+          entry.lastTestAt = s.created_at;
+        }
       });
       stats.scoresByType = Object.entries(typeMap).map(([type, count]) => ({ type, count }));
 
-      // Daily score averages (last 30 days, grouped by day)
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const recentScores = scoresData.filter(
@@ -60,62 +93,131 @@ router.get("/stats", async (req, res) => {
           count,
         }))
         .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-12); // Last 12 data points for the chart
+        .slice(-12);
 
-      // Top scorers (aggregate by user_id, take top 5)
-      const userScoreMap = {};
-      scoresData.forEach((s) => {
-        if (!s.user_id) return;
-        if (!userScoreMap[s.user_id] || s.score > userScoreMap[s.user_id].score) {
-          userScoreMap[s.user_id] = { user_id: s.user_id, score: s.score, test_type: s.test_type };
-        }
-      });
-      const topScorerIds = Object.values(userScoreMap)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
-
-      // Resolve user emails for top scorers
-      for (const scorer of topScorerIds) {
-        try {
-          const { data: userData } = await supabase.auth.admin.getUserById(scorer.user_id);
-          scorer.email = userData?.user?.email || "Unknown";
-          scorer.name = userData?.user?.user_metadata?.name || "";
-        } catch {
-          scorer.email = "Unknown";
-          scorer.name = "";
-        }
-      }
-      stats.topScorers = topScorerIds;
+      stats.userTestPerformance = Object.values(userScoreMap)
+        .map((entry) => ({
+          user_id: entry.user_id,
+          attempts: entry.attempts,
+          averageScore: Math.round(entry.totalScore / Math.max(1, entry.attempts)),
+          highestScore: entry.highestScore === Number.NEGATIVE_INFINITY ? 0 : entry.highestScore,
+          highestScoreType: entry.highestScoreType,
+          lastTestAt: entry.lastTestAt,
+          testTypes: Array.from(entry.testTypes),
+        }))
+        .sort((a, b) => {
+          if (b.highestScore !== a.highestScore) return b.highestScore - a.highestScore;
+          if (b.averageScore !== a.averageScore) return b.averageScore - a.averageScore;
+          return b.attempts - a.attempts;
+        });
     }
 
     // 2. FSL sign samples stats
     const { data: samplesData, error: samplesErr } = await supabase
       .from("fsl_sign_samples")
-      .select("id, label, category, is_verified");
+      .select("id, label, category, is_verified, created_at, recorded_by");
 
     if (!samplesErr && samplesData) {
       stats.totalSamples = samplesData.length;
       stats.verifiedSamples = samplesData.filter((s) => s.is_verified).length;
 
-      // Unique labels
       const labelSet = new Set(samplesData.map((s) => s.label));
       stats.uniqueLabels = labelSet.size;
 
-      // Samples by category
       const catMap = {};
+      const modelContributionMap = {};
       samplesData.forEach((s) => {
         const cat = s.category || "uncategorized";
         if (!catMap[cat]) catMap[cat] = { labels: new Set(), count: 0 };
         catMap[cat].labels.add(s.label);
         catMap[cat].count += 1;
+
+        if (!s.recorded_by) return;
+        userIds.add(s.recorded_by);
+        if (!modelContributionMap[s.recorded_by]) {
+          modelContributionMap[s.recorded_by] = {
+            user_id: s.recorded_by,
+            totalSamples: 0,
+            verifiedSamples: 0,
+            labels: new Set(),
+            lastSampleAt: null,
+          };
+        }
+
+        const entry = modelContributionMap[s.recorded_by];
+        entry.totalSamples += 1;
+        if (s.is_verified) entry.verifiedSamples += 1;
+        if (s.label) entry.labels.add(s.label);
+        if (!entry.lastSampleAt || new Date(s.created_at) > new Date(entry.lastSampleAt)) {
+          entry.lastSampleAt = s.created_at;
+        }
       });
       stats.samplesByCategory = Object.entries(catMap).map(([category, { labels, count }]) => ({
         category,
         count,
         uniqueLabels: labels.size,
-        labels: Array.from(labels).slice(0, 10), // First 10 labels per category
+        labels: Array.from(labels).slice(0, 10),
       }));
+
+      stats.userModelContributions = Object.values(modelContributionMap)
+        .map((entry) => ({
+          user_id: entry.user_id,
+          totalSamples: entry.totalSamples,
+          verifiedSamples: entry.verifiedSamples,
+          unverifiedSamples: entry.totalSamples - entry.verifiedSamples,
+          uniqueLabels: entry.labels.size,
+          lastSampleAt: entry.lastSampleAt,
+        }))
+        .sort((a, b) => {
+          if (b.verifiedSamples !== a.verifiedSamples) return b.verifiedSamples - a.verifiedSamples;
+          if (b.totalSamples !== a.totalSamples) return b.totalSamples - a.totalSamples;
+          return b.uniqueLabels - a.uniqueLabels;
+        });
     }
+
+    // Resolve names/emails for users appearing in report records.
+    const profileIds = Array.from(userIds);
+    if (profileIds.length > 0) {
+      const { data: profilesData, error: profilesErr } = await supabase
+        .from("user_profiles")
+        .select("id, full_name, email")
+        .in("id", profileIds);
+
+      if (!profilesErr && profilesData) {
+        profilesData.forEach((profile) => {
+          userProfileMap.set(profile.id, {
+            name: profile.full_name || "",
+            email: profile.email || "",
+          });
+        });
+      }
+    }
+
+    stats.userTestPerformance = stats.userTestPerformance.map((entry) => {
+      const profile = userProfileMap.get(entry.user_id);
+      return {
+        ...entry,
+        name: profile?.name || "",
+        email: profile?.email || "Unknown",
+      };
+    });
+
+    stats.topScorers = stats.userTestPerformance.slice(0, 5).map((entry) => ({
+      user_id: entry.user_id,
+      name: entry.name,
+      email: entry.email,
+      score: entry.highestScore,
+      test_type: entry.highestScoreType,
+    }));
+
+    stats.userModelContributions = stats.userModelContributions.map((entry) => {
+      const profile = userProfileMap.get(entry.user_id);
+      return {
+        ...entry,
+        name: profile?.name || "",
+        email: profile?.email || "Unknown",
+      };
+    });
 
     // 3. Recent app events (last 20)
     const { data: eventsData, error: eventsErr } = await supabase
@@ -141,6 +243,8 @@ router.get("/stats", async (req, res) => {
         scoresByType: [],
         dailyScores: [],
         topScorers: [],
+        userTestPerformance: [],
+        userModelContributions: [],
         recentEvents: [],
         samplesByCategory: [],
       });
