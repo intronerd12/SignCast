@@ -240,7 +240,7 @@ router.post("/teach/local", async (req, res) => {
   }
 
   try {
-    const mlDataDir = path.join(__dirname, "../../../ml/data");
+    const mlDataDir = path.join(__dirname, "../../ml/data");
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
     if (isAdmin) {

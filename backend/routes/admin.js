@@ -153,7 +153,7 @@ router.get("/stats", async (req, res) => {
 // Returns a list of all unverified images in ml/data/pending
 router.get("/pending", async (req, res) => {
   try {
-    const pendingDir = path.join(__dirname, "../../../ml/data/pending");
+    const pendingDir = path.join(__dirname, "../../ml/data/pending");
     if (!fs.existsSync(pendingDir)) return res.json({ success: true, pending: [] });
 
     const labels = fs.readdirSync(pendingDir);
@@ -184,7 +184,7 @@ router.get("/pending", async (req, res) => {
 // Serve the pending image directly
 router.get("/pending/image/:label/:filename", (req, res) => {
   const { label, filename } = req.params;
-  const imagePath = path.join(__dirname, "../../../ml/data/pending", label, filename);
+  const imagePath = path.join(__dirname, "../../ml/data/pending", label, filename);
   if (fs.existsSync(imagePath)) {
     return res.sendFile(imagePath);
   }
@@ -197,7 +197,7 @@ router.post("/verify", async (req, res) => {
     const { label, filename, approved } = req.body;
     if (!label || !filename) return res.status(400).json({ success: false, message: "Missing label or filename" });
 
-    const pendingDir = path.join(__dirname, "../../../ml/data/pending", label);
+    const pendingDir = path.join(__dirname, "../../ml/data/pending", label);
     const jsonFilename = filename.replace('.jpg', '.json');
     
     const imagePath = path.join(pendingDir, filename);
@@ -208,7 +208,7 @@ router.post("/verify", async (req, res) => {
     }
 
     if (approved) {
-      const mlDataDir = path.join(__dirname, "../../../ml/data");
+      const mlDataDir = path.join(__dirname, "../../ml/data");
       const datasetDir = path.join(mlDataDir, "dataset", label);
       const landmarkFile = path.join(mlDataDir, "landmark_dataset.json");
 
@@ -242,21 +242,112 @@ router.post("/verify", async (req, res) => {
   }
 });
 
+// POST /api/v1/admin/verify/bulk
+router.post("/verify/bulk", async (req, res) => {
+  try {
+    const { label, approved } = req.body;
+    if (!label) return res.status(400).json({ success: false, message: "Missing label" });
+
+    const pendingDir = path.join(__dirname, "../../ml/data/pending", label);
+    if (!fs.existsSync(pendingDir)) return res.status(404).json({ success: false, message: "Pending folder not found" });
+
+    const files = fs.readdirSync(pendingDir).filter(f => f.endsWith('.jpg'));
+    if (files.length === 0) return res.status(404).json({ success: false, message: "No images found for this label" });
+    
+    if (approved) {
+      const mlDataDir = path.join(__dirname, "../../ml/data");
+      const datasetDir = path.join(mlDataDir, "dataset", label);
+      const landmarkFile = path.join(mlDataDir, "landmark_dataset.json");
+
+      if (!fs.existsSync(datasetDir)) fs.mkdirSync(datasetDir, { recursive: true });
+
+      let allLandmarks = [];
+      if (fs.existsSync(landmarkFile)) {
+        try { allLandmarks = JSON.parse(fs.readFileSync(landmarkFile, "utf-8")); } catch (err) {}
+      }
+
+      for (const filename of files) {
+        const jsonFilename = filename.replace('.jpg', '.json');
+        const imagePath = path.join(pendingDir, filename);
+        const jsonPath = path.join(pendingDir, jsonFilename);
+
+        if (!fs.existsSync(imagePath) || !fs.existsSync(jsonPath)) continue;
+
+        // Move Image
+        const existingFiles = fs.readdirSync(datasetDir).filter(f => f.endsWith('.jpg'));
+        const newImageFilename = `${label}_${String(existingFiles.length).padStart(3, '0')}.jpg`;
+        fs.renameSync(imagePath, path.join(datasetDir, newImageFilename));
+
+        // Append Features
+        const featureData = JSON.parse(fs.readFileSync(jsonPath, "utf-8"));
+        allLandmarks.push({ label: featureData.label, features: featureData.features });
+        fs.unlinkSync(jsonPath);
+      }
+      fs.writeFileSync(landmarkFile, JSON.stringify(allLandmarks, null, 2));
+    } else {
+      // Reject: delete all
+      for (const filename of files) {
+        const jsonFilename = filename.replace('.jpg', '.json');
+        const imagePath = path.join(pendingDir, filename);
+        const jsonPath = path.join(pendingDir, jsonFilename);
+        if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+        if (fs.existsSync(jsonPath)) fs.unlinkSync(jsonPath);
+      }
+    }
+
+    // Clean up empty directory
+    try { fs.rmdirSync(pendingDir); } catch(e) {}
+
+    return res.json({ success: true, message: approved ? `Approved ${files.length} frames for '${label}'` : `Rejected ${files.length} frames for '${label}'` });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // POST /api/v1/admin/train
 router.post("/train", async (req, res) => {
   try {
-    const mlDir = path.join(__dirname, "../../../ml");
-    // Ensure the script is executed in the ml directory so it resolves paths correctly
+    const mlDir = path.join(__dirname, "../../ml");
+    // 1. Train the PyTorch model
     exec("python train_landmark_model.py", { cwd: mlDir }, (error, stdout, stderr) => {
       if (error) {
-        console.error(`Train error: ${error.message}`);
-        return res.status(500).json({ success: false, message: "Training failed", error: stderr || error.message });
+        return res.status(500).json({ success: false, message: error.message, output: stdout + stderr });
       }
-      // Return the python script output logs
-      return res.json({ success: true, output: stdout });
+
+      // 2. Export the trained model to ONNX format
+      exec("python export_onnx.py", { cwd: mlDir }, (onnxError, onnxStdout, onnxStderr) => {
+        if (onnxError) {
+          return res.status(500).json({ success: false, message: "ONNX Export failed: " + onnxError.message, output: stdout + "\n" + onnxStdout + onnxStderr });
+        }
+
+        // 3. Copy the exported ONNX model and labels to the frontend public folder
+        try {
+          const frontendModelsDir = path.join(__dirname, "../../frontend/public/models");
+          if (!fs.existsSync(frontendModelsDir)) {
+            fs.mkdirSync(frontendModelsDir, { recursive: true });
+          }
+
+          fs.copyFileSync(
+            path.join(mlDir, "models/landmark_model.onnx"),
+            path.join(frontendModelsDir, "landmark_model.onnx")
+          );
+          fs.copyFileSync(
+            path.join(mlDir, "models/landmark_labels.json"),
+            path.join(frontendModelsDir, "landmark_labels.json")
+          );
+
+          return res.json({ 
+            success: true, 
+            message: "Training and export complete. Models copied to frontend.", 
+            output: stdout + "\n" + onnxStdout 
+          });
+        } catch (copyErr) {
+          return res.status(500).json({ success: false, message: "Failed to copy models to frontend: " + copyErr.message, output: stdout + "\n" + onnxStdout });
+        }
+      });
     });
   } catch (error) {
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 });
 

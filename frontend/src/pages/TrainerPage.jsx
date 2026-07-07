@@ -38,12 +38,15 @@ export default function TrainerPage({ session }) {
   const [recentSamples, setRecentSamples] = useState([])
   const [lockoutUntil, setLockoutUntil] = useState(null)
   const [lockoutTimeRemaining, setLockoutTimeRemaining] = useState(0)
+  const [showVulgarWarning, setShowVulgarWarning] = useState(false)
   const [form, setForm] = useState({
     label: '',
     category: 'word',
     notes: '',
     captureImage: true,
   })
+  
+  const [capturedPreview, setCapturedPreview] = useState(null)
 
   // Current frame landmarks (updated each animation frame)
   const currentLandmarksRef = useRef(null)
@@ -54,20 +57,31 @@ export default function TrainerPage({ session }) {
     if (!landmarks || landmarks.length < 21) return false;
     
     // Y-axis: 0 is top, 1 is bottom. Smaller y means higher.
+    const wrist = landmarks[0];
     const mTip = landmarks[12], mMcp = landmarks[9];
-    const iTip = landmarks[8], iPip = landmarks[6];
-    const rTip = landmarks[16], rPip = landmarks[14];
-    const pTip = landmarks[20], pPip = landmarks[18];
+    const iTip = landmarks[8], iPip = landmarks[6], iMcp = landmarks[5];
+    const rTip = landmarks[16], rPip = landmarks[14], rMcp = landmarks[13];
+    const pTip = landmarks[20], pPip = landmarks[18], pMcp = landmarks[17];
+    const tTip = landmarks[4], tIp = landmarks[3], tMcp = landmarks[2];
 
-    // Middle finger is extended if tip is much higher than MCP
+    // 1. Middle finger check
     const isMiddleExtended = mTip.y < mMcp.y - 0.08;
-    
-    // Other fingers are curled if their tips are lower than their PIP joints
     const isIndexCurled = iTip.y > iPip.y - 0.02;
     const isRingCurled = rTip.y > rPip.y - 0.02;
     const isPinkyCurled = pTip.y > pPip.y - 0.02;
+    const isMiddleFinger = isMiddleExtended && isIndexCurled && isRingCurled && isPinkyCurled;
 
-    return isMiddleExtended && isIndexCurled && isRingCurled && isPinkyCurled;
+    // 2. Thumbs down check
+    const isThumbPointingDown = tTip.y > tIp.y + 0.03 && tIp.y > tMcp.y + 0.02;
+    const dist = (p1, p2) => Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+    const indexClosed = dist(iTip, iMcp) < 0.12;
+    const middleClosed = dist(mTip, mMcp) < 0.12;
+    const ringClosed = dist(rTip, rMcp) < 0.12;
+    const pinkyClosed = dist(pTip, pMcp) < 0.12;
+    
+    const isThumbsDown = isThumbPointingDown && indexClosed && middleClosed && ringClosed && pinkyClosed;
+
+    return isMiddleFinger || isThumbsDown;
   }, [])
 
   // ─── Cleanup ───────────────────────────────────────────────
@@ -294,6 +308,7 @@ export default function TrainerPage({ session }) {
         stopCamera();
         setCameraState('locked');
         setStatus('Inappropriate gesture detected. Locking camera...');
+        setShowVulgarWarning(true);
         
         // Report strike
         if (session?.userId) {
@@ -375,7 +390,7 @@ export default function TrainerPage({ session }) {
     canvas.height = video.videoHeight
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
-    return canvas.toDataURL('image/jpeg', 1.0)
+    return canvas.toDataURL('image/jpeg', 0.5)
   }, [])
 
   const downloadImage = useCallback((dataUrl, label) => {
@@ -417,7 +432,7 @@ export default function TrainerPage({ session }) {
     return data
   }, [session?.userId, form.category, form.notes])
 
-  // ─── Static / Dataset capture (100 frames) ────────────────
+  // ─── Static / Dataset capture (100 frames with Preview) ─────────
   const captureStatic = async () => {
     const label = form.label.trim().toLowerCase()
 
@@ -431,12 +446,11 @@ export default function TrainerPage({ session }) {
       return
     }
 
-    setIsSaving(true)
     setIsCapturing(true)
     setDatasetProgress(0)
     cancelDatasetRef.current = false
     
-    let capturedCount = 0;
+    let capturedFrames = [];
     const totalToCapture = 100;
     const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -445,7 +459,7 @@ export default function TrainerPage({ session }) {
       
       const landmarks = currentLandmarksRef.current
       if (!landmarks) {
-        setStatus(`No hand detected — waiting... (${capturedCount}/${totalToCapture})`)
+        setStatus(`No hand detected — waiting... (${capturedFrames.length}/${totalToCapture})`)
         await delay(100)
         i--; // Retry this frame
         continue
@@ -458,36 +472,69 @@ export default function TrainerPage({ session }) {
         continue
       }
 
-      setStatus(`Capturing dataset sample... (${capturedCount + 1}/${totalToCapture})`)
+      setStatus(`Capturing dataset sample... (${capturedFrames.length + 1}/${totalToCapture})`)
 
-      try {
-        const dataUrl = captureSnapshot()
-        if (dataUrl) {
-           await fetch(`${API_BASE}/recognition/teach/local`, {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ 
-               label, 
-               features, 
-               image: dataUrl,
-               isAdmin: session?.isAdmin === true
-             })
-           })
-        }
-        capturedCount++;
-        setDatasetProgress(capturedCount)
-      } catch (error) {
-        console.error("Local capture error:", error)
+      const dataUrl = captureSnapshot()
+      if (dataUrl) {
+         capturedFrames.push({ features, dataUrl })
       }
-
+      
+      setDatasetProgress(capturedFrames.length)
       await delay(100) // Delay between captures
     }
 
-    setSessionCount((c) => c + capturedCount)
-    setStatus('✅ Images Captured!')
-    setIsSaving(false)
     setIsCapturing(false)
     setDatasetProgress(0)
+    
+    if (capturedFrames.length > 0) {
+      setStatus('Images captured! Please review.')
+      setCapturedPreview({ 
+        label, 
+        frames: capturedFrames,
+        previewImage: capturedFrames[0].dataUrl
+      })
+    } else {
+      setStatus('Capture cancelled or failed.')
+    }
+  }
+
+  const submitPreview = async () => {
+    if (!capturedPreview || !capturedPreview.frames) return
+    setIsSaving(true)
+    setStatus(`Submitting ${capturedPreview.frames.length} samples for verification...`)
+    
+    try {
+      let count = 0;
+      for (const frame of capturedPreview.frames) {
+        const response = await fetch(`${API_BASE}/recognition/teach/local`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            label: capturedPreview.label, 
+            features: frame.features, 
+            image: frame.dataUrl,
+            isAdmin: session?.isAdmin === true
+          })
+        })
+        if (!response.ok) {
+           throw new Error('Failed to upload frame');
+        }
+        count++;
+        setStatus(`Submitting... (${count}/${capturedPreview.frames.length})`)
+      }
+      setStatus('✅ Dataset submitted successfully to the admin!')
+      setSessionCount(c => c + count)
+    } catch (err) {
+      setStatus('Failed to submit sample.')
+    } finally {
+      setIsSaving(false)
+      setCapturedPreview(null)
+    }
+  }
+
+  const cancelPreview = () => {
+    setCapturedPreview(null)
+    setStatus('Camera active — hand tracking running. Perform your sign and capture.')
   }
 
   const cancelDatasetCapture = () => {
@@ -568,6 +615,48 @@ export default function TrainerPage({ session }) {
   // ─── UI ────────────────────────────────────────────────────
   return (
     <section className="trainer-layout">
+      {/* Vulgarity Warning Modal */}
+      {showVulgarWarning && (
+        <div className="glass-modal-overlay">
+          <div className="glass-modal-content warning">
+            <h2>⚠️ Warning</h2>
+            <p>
+              An inappropriate gesture was detected. Your camera has been temporarily locked and a strike has been recorded on your account. 
+              <br/><br/>
+              Please maintain a respectful learning environment. Repeated violations will result in further account restrictions.
+            </p>
+            <div className="glass-action-row">
+              <button 
+                className="glass-action-btn danger"
+                onClick={() => setShowVulgarWarning(false)}
+              >
+                I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Capture Preview Overlay */}
+      {capturedPreview && (
+        <div className="glass-modal-overlay dark-bg">
+          <div className="glass-modal-content preview">
+            <h2>Review captured dataset for "{capturedPreview.label}"</h2>
+            <img src={capturedPreview.previewImage} alt="Captured Preview" />
+            <p>You captured {capturedPreview.frames?.length || 1} frames.</p>
+            <p>Does this accurately represent the sign?</p>
+            <div className="glass-action-row">
+              <button className="glass-action-btn" onClick={submitPreview} disabled={isSaving}>
+                {isSaving ? '⏳ Sending...' : '✅ Send to Admin'}
+              </button>
+              <button className="glass-action-btn secondary" onClick={cancelPreview} disabled={isSaving}>
+                ❌ Retake
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="phone-stage" aria-label="FSL training camera">
         <div className="camera-panel">
           <video ref={videoRef} className="camera-feed" autoPlay muted playsInline />
@@ -599,17 +688,15 @@ export default function TrainerPage({ session }) {
 
         {/* Sequence progress bar */}
         {isCapturing && captureMode === 'sequence' && (
-          <div className="capture-progress-bar">
-            <div className="capture-progress-fill" style={{ width: `${(seqProgress / SEQ_LENGTH) * 100}%` }} />
-            <span className="capture-progress-label">{seqProgress} / {SEQ_LENGTH} frames</span>
+          <div className="premium-progress-container">
+            <div className="premium-progress-fill" style={{ width: `${(seqProgress / SEQ_LENGTH) * 100}%` }} />
           </div>
         )}
 
         {/* Dataset progress bar */}
         {isCapturing && captureMode === 'static' && (
-          <div className="capture-progress-bar">
-            <div className="capture-progress-fill" style={{ width: `${(datasetProgress / 100) * 100}%` }} />
-            <span className="capture-progress-label">{datasetProgress} / 100 photos</span>
+          <div className="premium-progress-container">
+            <div className="premium-progress-fill" style={{ width: `${(datasetProgress / 100) * 100}%` }} />
           </div>
         )}
 

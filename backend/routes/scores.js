@@ -12,7 +12,7 @@ router.get("/:userId", async (req, res) => {
       .from("fsl_scores")
       .select("*")
       .eq("user_id", userId)
-      .order("score", { ascending: false });
+      .order("created_at", { ascending: false });
 
     if (error) {
       if (error.code === '42P01') {
@@ -22,7 +22,7 @@ router.get("/:userId", async (req, res) => {
       return res.status(400).json({ success: false, message: error.message });
     }
 
-    const highestScore = data && data.length > 0 ? data[0].score : 0;
+    const highestScore = data && data.length > 0 ? Math.max(...data.map(d => d.score)) : 0;
     return res.json({ highest_score: highestScore, scores: data || [] });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });

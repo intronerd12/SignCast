@@ -29,7 +29,8 @@ const API_PREFIX = '/api/v1';
 const SERVER_STARTED_AT = new Date().toISOString();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/public/uploads', express.static(__dirname + '/public/uploads'));
 
 app.use(`${API_PREFIX}/users`, usersRouter);
@@ -93,9 +94,10 @@ const startServer = async () => {
     console.warn('Run backend/supabase/init.sql in Supabase SQL Editor to create missing tables.');
   }
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`SignCast backend running on http://localhost:${PORT}${API_PREFIX}`);
   });
+  server.setTimeout(600000); // 10 minute timeout for long-running ML training
 };
 
 startServer();

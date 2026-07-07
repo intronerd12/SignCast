@@ -23,7 +23,23 @@ export default function RecognitionWorkspace({ session }) {
   const CONFIDENCE_THRESHOLD = 70
   const STABLE_FRAMES = 5 // Reduced slightly for roboflow responsiveness
 
-  const sentence = useMemo(() => transcript.map((item) => item.phrase).join(' '), [transcript])
+  const sentence = useMemo(() => {
+    let result = '';
+    for (let i = 0; i < transcript.length; i++) {
+      const phrase = transcript[i].phrase;
+      if (i > 0) {
+        const prevPhrase = transcript[i-1].phrase;
+        if (phrase.length === 1 && prevPhrase.length === 1) {
+          result += phrase.toLowerCase();
+        } else {
+          result += ' ' + phrase;
+        }
+      } else {
+        result = phrase;
+      }
+    }
+    return result;
+  }, [transcript])
 
   // Cleanup on unmount
   useEffect(() => () => {

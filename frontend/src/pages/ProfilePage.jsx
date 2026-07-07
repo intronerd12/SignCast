@@ -14,15 +14,22 @@ export default function ProfilePage({ session, onSessionUpdated, themePreference
   const [activity, setActivity] = useState({
     gesturesTrained: 215,
     translationsLogged: 1480,
-    spedSessions: 42,
+    highestScore: 0,
+    totalTests: 0,
     recentLabels: [],
   })
+  const [scoreHistory, setScoreHistory] = useState([])
   const [settings, setSettings] = useState({
     audibleFeedback: true,
     language: 'Filipino Sign Language',
   })
   const [uploadStatus, setUploadStatus] = useState({ type: '', message: '' })
   const [isUploadingImage, setIsUploadingImage] = useState(false)
+  
+  const [lockoutStatus, setLockoutStatus] = useState(null)
+  const [appealReason, setAppealReason] = useState('')
+  const [isSubmittingAppeal, setIsSubmittingAppeal] = useState(false)
+  const [appealFeedback, setAppealFeedback] = useState({ type: '', text: '' })
 
   const displayName = getDisplayName(session, profile)
   const initials = getInitials(displayName || session?.email)
@@ -39,10 +46,12 @@ export default function ProfilePage({ session, onSessionUpdated, themePreference
       if (!session?.userId) return
 
       try {
-        const [profileResponse, statsResponse, samplesResponse] = await Promise.all([
+        const [profileResponse, statsResponse, samplesResponse, lockoutResponse, scoresResponse] = await Promise.all([
           fetch(`${API_BASE}/users/${session.userId}`),
           fetch(`${API_BASE}/recognition/teach/stats?limit=1000`),
           fetch(`${API_BASE}/recognition/teach?limit=4`),
+          fetch(`${API_BASE}/users/${session.userId}/vulgarity-status`),
+          fetch(`${API_BASE}/scores/${session.userId}`),
         ])
 
         if (profileResponse.ok) {
@@ -84,6 +93,30 @@ export default function ProfilePage({ session, onSessionUpdated, themePreference
               ...current,
               recentLabels,
               translationsLogged: Math.max(current.translationsLogged, recentLabels.length * 370),
+            }))
+          }
+        }
+
+        if (lockoutResponse.ok) {
+          const lockoutData = await lockoutResponse.json()
+          if (isMounted && lockoutData?.success) {
+            setLockoutStatus({
+              strikes: lockoutData.strikes,
+              lockUntil: lockoutData.camera_lock_until,
+              pendingAppeal: lockoutData.pending_appeal,
+              appealReason: lockoutData.appeal_reason
+            })
+          }
+        }
+
+        if (scoresResponse.ok) {
+          const scoresData = await scoresResponse.json()
+          if (isMounted && scoresData.scores) {
+            setScoreHistory(scoresData.scores.slice(0, 5))
+            setActivity((current) => ({
+              ...current,
+              highestScore: scoresData.highest_score || 0,
+              totalTests: scoresData.scores.length
             }))
           }
         }
@@ -163,6 +196,38 @@ export default function ProfilePage({ session, onSessionUpdated, themePreference
     }
   }
 
+  const submitAppeal = async () => {
+    if (!appealReason.trim()) {
+      setAppealFeedback({ type: 'error', text: 'Please enter a reason for your appeal.' })
+      return
+    }
+    
+    setIsSubmittingAppeal(true)
+    setAppealFeedback({ type: '', text: '' })
+    
+    try {
+      const response = await fetch(`${API_BASE}/users/${session.userId}/appeal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: appealReason }),
+      })
+      
+      const data = await response.json()
+      if (response.ok && data.success) {
+        setAppealFeedback({ type: 'success', text: 'Appeal submitted successfully.' })
+        setLockoutStatus(curr => ({ ...curr, pendingAppeal: true, appealReason: appealReason }))
+      } else {
+        throw new Error(data.error || 'Failed to submit appeal')
+      }
+    } catch (error) {
+      setAppealFeedback({ type: 'error', text: error.message })
+    } finally {
+      setIsSubmittingAppeal(false)
+    }
+  }
+
+  const isLockedOut = lockoutStatus?.lockUntil > Date.now();
+
   return (
     <section className="dashboard-page">
       <div className="dashboard-topbar">
@@ -176,6 +241,47 @@ export default function ProfilePage({ session, onSessionUpdated, themePreference
       </div>
 
       <div className="dashboard-grid">
+        {isLockedOut && (
+          <section className="dashboard-card" style={{ gridColumn: '1 / -1', border: '2px solid #ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)' }}>
+            <div className="dashboard-card-heading">
+              <p className="eyebrow" style={{ color: '#ef4444' }}>Account Restriction</p>
+              <h2 style={{ color: '#ef4444', fontSize: '1.2rem', marginBottom: '8px' }}>Camera Locked</h2>
+            </div>
+            <p style={{ marginBottom: '16px' }}>
+              Your camera access has been temporarily locked due to an inappropriate gesture. 
+              Unlock time: <strong>{new Date(lockoutStatus.lockUntil).toLocaleString()}</strong>
+            </p>
+            
+            {lockoutStatus.pendingAppeal ? (
+              <div style={{ padding: '12px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '6px' }}>
+                <p style={{ fontWeight: 'bold', color: '#f59e0b', margin: '0 0 8px 0' }}>Appeal Pending Review</p>
+                <p style={{ margin: 0, fontStyle: 'italic', fontSize: '0.9rem' }}>"{lockoutStatus.appealReason}"</p>
+              </div>
+            ) : (
+              <div style={{ marginTop: '16px' }}>
+                <p style={{ marginBottom: '8px', fontWeight: 'bold' }}>Submit an Appeal Ticket</p>
+                <textarea 
+                  rows={3} 
+                  placeholder="Explain what happened..."
+                  value={appealReason}
+                  onChange={(e) => setAppealReason(e.target.value)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#1a1a1a', border: '1px solid #333', color: '#fff', marginBottom: '8px' }}
+                />
+                <button 
+                  onClick={submitAppeal}
+                  disabled={isSubmittingAppeal}
+                  style={{ backgroundColor: '#ef4444', color: '#fff', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                  {isSubmittingAppeal ? 'Submitting...' : 'Submit Appeal'}
+                </button>
+                {appealFeedback.text && (
+                  <p style={{ color: appealFeedback.type === 'error' ? '#ef4444' : '#10b981', marginTop: '8px' }}>{appealFeedback.text}</p>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
         <section className="profile-card dashboard-card">
           <div className="profile-avatar" aria-label={`${displayName} profile avatar`}>
             {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{initials}</span>}
@@ -244,9 +350,41 @@ export default function ProfilePage({ session, onSessionUpdated, themePreference
         </section>
 
         <section className="stat-card dashboard-card">
-          <span className="stat-icon" aria-hidden="true">SP</span>
-          <p>SPED sessions attended</p>
-          <strong>{activity.spedSessions} SPED</strong>
+          <span className="stat-icon" aria-hidden="true">🎯</span>
+          <p>Highest FSL Score</p>
+          <strong>{activity.highestScore} pts</strong>
+        </section>
+
+        <section className="stat-card dashboard-card">
+          <span className="stat-icon" aria-hidden="true">📝</span>
+          <p>Certification Tests Taken</p>
+          <strong>{activity.totalTests} tests</strong>
+        </section>
+
+        <section className="dashboard-card" style={{ gridColumn: '1 / -1' }}>
+          <div className="dashboard-card-heading">
+            <p className="eyebrow">Recent Certifications</p>
+            <span>Score History</span>
+          </div>
+          {scoreHistory.length > 0 ? (
+            <div className="recent-scores-list" style={{ marginTop: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              {scoreHistory.map(score => (
+                <div key={score.id} style={{ flex: '1 1 200px', padding: '16px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#10b981' }}>{score.score} pts</span>
+                    <span style={{ fontSize: '0.8rem', opacity: 0.7, textTransform: 'capitalize' }}>{score.test_type}</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', opacity: 0.5 }}>
+                    {new Date(score.created_at).toLocaleDateString()} at {new Date(score.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ padding: '32px', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '8px', marginTop: '16px', border: '1px dashed rgba(255,255,255,0.1)' }}>
+              <p style={{ opacity: 0.7, margin: 0 }}>No certification tests taken yet. Head to the Learning Hub to start your journey!</p>
+            </div>
+          )}
         </section>
 
         <section className="settings-card dashboard-card">

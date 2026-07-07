@@ -19,6 +19,13 @@ export default function AdminPage({ session, onLogout }) {
   const [pendingSamples, setPendingSamples] = useState([])
   const [isTraining, setIsTraining] = useState(false)
   const [trainingLogs, setTrainingLogs] = useState('')
+  const logsEndRef = useRef(null)
+
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [trainingLogs])
   
   // Real stats from backend
   const [stats, setStats] = useState({
@@ -150,22 +157,27 @@ export default function AdminPage({ session, onLogout }) {
     }
   }
 
-  const verifySample = async (sample, approved) => {
+  const [mutatingLabel, setMutatingLabel] = useState(null)
+
+  const verifyBulk = async (label, approved) => {
+    setMutatingLabel(label)
     try {
-      const res = await fetch(`${API_BASE}/admin/verify`, {
+      const res = await fetch(`${API_BASE}/admin/verify/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: sample.label, filename: sample.filename, approved })
+        body: JSON.stringify({ label, approved })
       })
       const data = await res.json()
       if (data.success) {
-        setPendingSamples(current => current.filter(s => s.filename !== sample.filename))
-        setActionStatus({ type: 'success', message: `${sample.label} ${approved ? 'approved' : 'rejected'}.` })
+        setPendingSamples(current => current.filter(s => s.label !== label))
+        setActionStatus({ type: 'success', message: data.message })
       } else {
         throw new Error(data.message)
       }
     } catch (err) {
       setActionStatus({ type: 'error', message: err.message || 'Verification failed.' })
+    } finally {
+      setMutatingLabel(null)
     }
   }
 
@@ -640,6 +652,37 @@ export default function AdminPage({ session, onLogout }) {
     }
   }
 
+  const resolveLockout = async (user, action) => {
+    setMutatingUserId(user.id)
+    setActionStatus({ type: '', message: `Resolving lockout for ${user.name || user.email}...` })
+    try {
+      const response = await fetch(`${API_BASE}/users/${user.id}/resolve-lockout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      })
+      if (!response.ok) {
+        throw new Error(await parseAdminActionError(response))
+      }
+      
+      setUsers((current) => current.map((u) => {
+        if (u.id === user.id) {
+          if (action === 'approve' || action === 'remove_lockout') {
+            return { ...u, camera_lock_until: 0, pending_appeal: false, appeal_reason: null }
+          } else if (action === 'reject') {
+            return { ...u, pending_appeal: false, appeal_reason: null }
+          }
+        }
+        return u
+      }))
+      setActionStatus({ type: 'success', message: `Lockout action applied.` })
+    } catch (error) {
+      setActionStatus({ type: 'error', message: error.message || 'Unable to resolve lockout.' })
+    } finally {
+      setMutatingUserId('')
+    }
+  }
+
   const deleteUser = async (user) => {
     if (!user?.id || user.id === session?.userId) return
 
@@ -849,6 +892,22 @@ export default function AdminPage({ session, onLogout }) {
                     <td style={{textAlign: 'center', color: strikes > 0 ? '#ef4444' : 'inherit'}}>{strikes}</td>
                     <td>{formatAdminDate(user.createdAt)}</td>
                     <td>
+                      {user.pending_appeal ? (
+                        <div style={{ marginBottom: '8px', fontSize: '12px', padding: '8px', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b', borderRadius: '4px' }}>
+                          <strong style={{ color: '#f59e0b', display: 'block', marginBottom: '4px' }}>Appeal Pending:</strong>
+                          <span style={{ fontStyle: 'italic', wordBreak: 'break-word', whiteSpace: 'normal' }}>"{user.appeal_reason}"</span>
+                          <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
+                            <button onClick={() => resolveLockout(user, 'approve')} disabled={isBusy} style={{ flex: 1, backgroundColor: '#10b981', color: 'white', border: 'none', padding: '4px', borderRadius: '4px', cursor: 'pointer', fontSize: '10px', fontWeight: 'bold' }}>Approve</button>
+                            <button onClick={() => resolveLockout(user, 'reject')} disabled={isBusy} style={{ flex: 1, backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '4px', borderRadius: '4px', cursor: 'pointer', fontSize: '10px', fontWeight: 'bold' }}>Reject</button>
+                          </div>
+                        </div>
+                      ) : isLocked && (
+                        <div style={{ marginBottom: '8px' }}>
+                          <button onClick={() => resolveLockout(user, 'remove_lockout')} disabled={isBusy} style={{ width: '100%', backgroundColor: '#3b82f6', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+                            Remove Lockout
+                          </button>
+                        </div>
+                      )}
                       <div className="admin-action-group">
                         <button
                           type="button"
@@ -935,32 +994,61 @@ export default function AdminPage({ session, onLogout }) {
           </div>
         ) : (
           <div className="admin-table-wrap" style={{ maxHeight: '400px', overflowY: 'auto' }}>
-            <table>
+            <table className="premium-table">
               <thead>
                 <tr>
-                  <th>Image</th>
-                  <th>Proposed Label</th>
-                  <th>Submitted</th>
+                  <th>Preview</th>
+                  <th>Sign Label</th>
+                  <th>Frames</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {pendingSamples.map((sample) => (
-                  <tr key={sample.filename}>
+                {Object.values(
+                  pendingSamples.reduce((acc, sample) => {
+                    if (!acc[sample.label]) {
+                      acc[sample.label] = { 
+                        label: sample.label, 
+                        count: 0, 
+                        preview: sample.filename,
+                        timestamp: sample.timestamp
+                      }
+                    }
+                    acc[sample.label].count++
+                    if (sample.timestamp > acc[sample.label].timestamp) {
+                      acc[sample.label].timestamp = sample.timestamp
+                      acc[sample.label].preview = sample.filename
+                    }
+                    return acc
+                  }, {})
+                ).map((group) => (
+                  <tr key={group.label}>
                     <td>
                       <img 
-                        src={`${API_BASE}/admin/pending/image/${sample.label}/${sample.filename}`} 
+                        src={`${API_BASE}/admin/pending/image/${group.label}/${group.preview}`} 
                         alt="Pending" 
-                        style={{width: '60px', height: '60px', objectFit: 'cover', borderRadius: '4px'}} 
+                        style={{width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px'}} 
                         loading="lazy"
                       />
                     </td>
-                    <td><strong>{sample.label}</strong></td>
-                    <td>{new Date(parseInt(sample.timestamp)).toLocaleString()}</td>
+                    <td><strong>{group.label}</strong></td>
+                    <td>{group.count} frames</td>
                     <td>
                       <div className="admin-action-group">
-                        <button className="admin-action-button success" onClick={() => verifySample(sample, true)}>✅ Approve</button>
-                        <button className="admin-action-button danger" onClick={() => verifySample(sample, false)}>❌ Reject</button>
+                        <button 
+                          className="glass-action-btn" 
+                          disabled={mutatingLabel === group.label}
+                          onClick={() => verifyBulk(group.label, true)}
+                        >
+                          {mutatingLabel === group.label ? '⏳ Processing...' : '✅ Approve All'}
+                        </button>
+                        <button 
+                          className="glass-action-btn danger" 
+                          disabled={mutatingLabel === group.label}
+                          onClick={() => verifyBulk(group.label, false)}
+                        >
+                          {mutatingLabel === group.label ? '⏳ Processing...' : '❌ Reject All'}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -982,8 +1070,8 @@ export default function AdminPage({ session, onLogout }) {
             This will rebuild the underlying TensorFlow/Scikit-Learn models and deploy them to the frontend instantly.
           </p>
           <button 
-            className="admin-action-button success" 
-            style={{ padding: '10px 20px', fontSize: '16px', backgroundColor: '#3b82f6', color: 'white' }}
+            className="glass-action-btn" 
+            style={{ padding: '10px 20px', fontSize: '16px' }}
             onClick={trainModel}
             disabled={isTraining}
           >
@@ -991,8 +1079,9 @@ export default function AdminPage({ session, onLogout }) {
           </button>
 
           {trainingLogs && (
-            <div style={{ marginTop: '20px', backgroundColor: '#1e1e1e', color: '#0f0', padding: '15px', borderRadius: '8px', fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: '300px', overflowY: 'auto' }}>
+            <div style={{ marginTop: '20px', backgroundColor: '#05080c', color: '#4ae5bd', padding: '15px', borderRadius: '12px', fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: '300px', overflowY: 'auto', border: '1px solid rgba(74, 229, 189, 0.2)', boxShadow: 'inset 0 4px 10px rgba(0,0,0,0.5)' }}>
               {trainingLogs}
+              <div ref={logsEndRef} />
             </div>
           )}
         </div>

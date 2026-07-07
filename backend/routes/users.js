@@ -197,6 +197,8 @@ router.get("/", async (req, res) => {
       const meta = profileMap[u.id] || {};
       formatted.vulgarity_strikes = meta.vulgarity_strikes || 0;
       formatted.camera_lock_until = meta.camera_lock_until || 0;
+      formatted.pending_appeal = meta.pending_appeal || false;
+      formatted.appeal_reason = meta.appeal_reason || null;
       return formatted;
     });
 
@@ -620,7 +622,90 @@ router.get("/:id/vulgarity-status", async (req, res) => {
       success: true,
       strikes: existingMeta.vulgarity_strikes || 0,
       camera_lock_until: existingMeta.camera_lock_until || 0,
+      pending_appeal: existingMeta.pending_appeal || false,
+      appeal_reason: existingMeta.appeal_reason || null,
     });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/v1/users/:id/appeal
+// Submit an appeal for camera lockout
+router.post("/:id/appeal", async (req, res) => {
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { reason } = req.body;
+    
+    if (!reason || reason.trim() === '') {
+      return res.status(400).json({ success: false, error: "Reason is required" });
+    }
+
+    const { data: profileData, error: profileErr } = await supabase
+      .from("user_profiles")
+      .select("metadata")
+      .eq("id", req.params.id)
+      .single();
+
+    if (profileErr) throw profileErr;
+
+    const existingMeta = profileData?.metadata || {};
+    const newMeta = {
+      ...existingMeta,
+      pending_appeal: true,
+      appeal_reason: reason.trim()
+    };
+
+    const { error: updateErr } = await supabase
+      .from("user_profiles")
+      .update({ metadata: newMeta })
+      .eq("id", req.params.id);
+
+    if (updateErr) throw updateErr;
+
+    return res.json({ success: true, message: "Appeal submitted successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/v1/users/:id/resolve-lockout
+// Resolve appeal or remove lockout manually
+router.post("/:id/resolve-lockout", async (req, res) => {
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { action } = req.body; 
+
+    const { data: profileData, error: profileErr } = await supabase
+      .from("user_profiles")
+      .select("metadata")
+      .eq("id", req.params.id)
+      .single();
+
+    if (profileErr) throw profileErr;
+
+    const existingMeta = profileData?.metadata || {};
+    const newMeta = { ...existingMeta };
+
+    if (action === 'approve' || action === 'remove_lockout') {
+      newMeta.camera_lock_until = 0;
+      newMeta.pending_appeal = false;
+      newMeta.appeal_reason = null;
+    } else if (action === 'reject') {
+      newMeta.pending_appeal = false;
+      newMeta.appeal_reason = null;
+    } else {
+      return res.status(400).json({ success: false, error: "Invalid action" });
+    }
+
+    const { error: updateErr } = await supabase
+      .from("user_profiles")
+      .update({ metadata: newMeta })
+      .eq("id", req.params.id);
+
+    if (updateErr) throw updateErr;
+
+    return res.json({ success: true, message: `Action ${action} applied successfully` });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
