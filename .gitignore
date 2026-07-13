@@ -39,4 +39,5 @@ backend/public/uploads/
 # ML models and datasets
 ml/models/
 ml/data/
+Datasets/
 __pycache__/
